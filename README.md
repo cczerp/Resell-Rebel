@@ -162,43 +162,189 @@ Copy `.env.example` to `.env` and configure your credentials:
 cp .env.example .env
 ```
 
-### Required Credentials
+### Getting API Keys - Step by Step
 
-#### eBay API (Required for eBay)
+#### 1️⃣ eBay API Credentials (Required for eBay)
 
-1. Create an eBay developer account: https://developer.ebay.com/
-2. Create an application to get your Client ID and Secret
-3. Generate a refresh token using OAuth
+**Step 1: Create eBay Developer Account**
+1. Go to https://developer.ebay.com/
+2. Click "Register" and create a developer account
+3. Complete the registration process
 
+**Step 2: Create an Application**
+1. Once logged in, go to https://developer.ebay.com/my/keys
+2. Click "Create Application Key"
+3. Choose "Production" keys (or "Sandbox" for testing)
+4. Fill in application details:
+   - Application Title: "AI Cross-Poster" (or your choice)
+   - Privacy Policy URL: (can use placeholder for personal use)
+5. Click "Create"
+
+**Step 3: Get Client ID and Secret**
+1. On the Application Keys page, you'll see:
+   - **App ID (Client ID)**: Copy this
+   - **Cert ID (Client Secret)**: Copy this
+2. Add these to your `.env` file
+
+**Step 4: Generate User Refresh Token**
+1. Go to https://developer.ebay.com/my/auth/?env=production
+2. Select your application
+3. Choose the required scopes:
+   - `https://api.ebay.com/oauth/api_scope/sell.inventory`
+   - `https://api.ebay.com/oauth/api_scope/sell.inventory.readonly`
+   - `https://api.ebay.com/oauth/api_scope/sell.fulfillment`
+   - `https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly`
+   - `https://api.ebay.com/oauth/api_scope/sell.account`
+   - `https://api.ebay.com/oauth/api_scope/sell.account.readonly`
+4. Click "Get OAuth Credential"
+5. Sign in with your eBay seller account
+6. Authorize the application
+7. Copy the **User Refresh Token** (starts with `v^1.1#...`)
+
+**Add to .env:**
 ```env
-EBAY_CLIENT_ID=your_client_id
-EBAY_CLIENT_SECRET=your_client_secret
-EBAY_REFRESH_TOKEN=your_refresh_token
+EBAY_CLIENT_ID=YourAppID-Here
+EBAY_CLIENT_SECRET=YourCertID-Here
+EBAY_REFRESH_TOKEN=v^1.1#your_long_refresh_token
 ```
 
-#### Mercari (Choose one method)
+---
 
-**Option 1: Mercari Shops API** (Recommended)
+#### 2️⃣ Mercari Credentials
+
+**Option A: Mercari Shops API** (Recommended if you have a Mercari Shop)
+
+> **Note**: Mercari Shops API is only available to approved shop sellers.
+
+1. Go to Mercari Shops seller portal
+2. Navigate to "Developer Settings" or "API Access"
+3. Request API access (may require approval)
+4. Once approved, generate:
+   - **API Key**: Your authentication token
+   - **Shop ID**: Your shop identifier
+
+**Add to .env:**
 ```env
-MERCARI_API_KEY=your_api_key
+MERCARI_API_KEY=your_api_key_here
 MERCARI_SHOP_ID=your_shop_id
 ```
 
-**Option 2: Mercari Automation** (Fallback)
+**Option B: Mercari Automation** (For regular Mercari accounts)
+
+> **Note**: This uses browser automation and requires Playwright.
+
+1. Install Playwright:
+   ```bash
+   pip install playwright
+   playwright install
+   ```
+
+2. Use your regular Mercari login credentials:
+
+**Add to .env:**
 ```env
+MERCARI_EMAIL=your_mercari_email@example.com
+MERCARI_PASSWORD=your_mercari_password
+```
+
+⚠️ **Security Note**: Store credentials securely. Never commit `.env` to version control.
+
+---
+
+#### 3️⃣ OpenAI API Key (Optional - for GPT-4 Vision verification)
+
+**Step 1: Create OpenAI Account**
+1. Go to https://platform.openai.com/signup
+2. Sign up for an account
+3. Verify your email
+
+**Step 2: Add Billing**
+1. Go to https://platform.openai.com/account/billing
+2. Add a payment method
+3. Add credits ($10 minimum recommended)
+
+**Step 3: Create API Key**
+1. Go to https://platform.openai.com/api-keys
+2. Click "Create new secret key"
+3. Name it: "AI Cross-Poster" (or your choice)
+4. Copy the key (starts with `sk-proj-...` or `sk-...`)
+   - ⚠️ **Save it immediately** - you can't see it again!
+
+**Add to .env:**
+```env
+OPENAI_API_KEY=sk-proj-your-key-here
+```
+
+**Pricing**: ~$0.01-0.03 per image analysis with GPT-4 Vision
+
+---
+
+#### 4️⃣ Anthropic API Key (Optional - for Claude analysis)
+
+**Step 1: Create Anthropic Account**
+1. Go to https://console.anthropic.com/
+2. Sign up for an account
+3. Verify your email
+
+**Step 2: Add Credits**
+1. Go to https://console.anthropic.com/settings/billing
+2. Add a payment method
+3. Add credits ($10 minimum recommended)
+
+**Step 3: Create API Key**
+1. Go to https://console.anthropic.com/settings/keys
+2. Click "Create Key"
+3. Name it: "AI Cross-Poster" (or your choice)
+4. Copy the key (starts with `sk-ant-...`)
+   - ⚠️ **Save it immediately** - you can't see it again!
+
+**Add to .env:**
+```env
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
+
+**Pricing**: ~$0.01-0.02 per image analysis with Claude 3.5 Sonnet
+
+---
+
+### Complete .env Example
+
+Here's what your complete `.env` file should look like:
+
+```env
+# eBay (Required for eBay publishing)
+EBAY_CLIENT_ID=YourAppID-ProductionKey
+EBAY_CLIENT_SECRET=YourCertID-ProductionKey
+EBAY_REFRESH_TOKEN=v^1.1#your_refresh_token
+
+# Mercari Shops (Option 1 - if you have Shops API access)
+MERCARI_API_KEY=your_mercari_shops_api_key
+MERCARI_SHOP_ID=your_shop_id
+
+# Mercari Automation (Option 2 - for regular accounts)
 MERCARI_EMAIL=your_email@example.com
 MERCARI_PASSWORD=your_password
-```
 
-#### AI Enhancement (Optional but Recommended)
-
-```env
-# OpenAI (for photo analysis)
-OPENAI_API_KEY=sk-your-openai-key
-
-# Anthropic (for enhanced copywriting)
+# AI Enhancement (Both optional but recommended)
+OPENAI_API_KEY=sk-proj-your-openai-key
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
+
+# Optional Settings
+USE_SANDBOX=false
+AUTO_ENHANCE=true
 ```
+
+### Minimum Requirements
+
+**To get started, you need at least ONE of:**
+- eBay credentials (for eBay publishing)
+- Mercari credentials (for Mercari publishing)
+
+**For AI enhancement, you need at least ONE of:**
+- OpenAI API key (GPT-4 Vision verification)
+- Anthropic API key (Claude analysis)
+
+💡 **Tip**: Both AI services work best together - Claude analyzes first, GPT-4 Vision verifies!
 
 ## 📖 Usage Guide
 
