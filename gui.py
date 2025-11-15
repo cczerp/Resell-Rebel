@@ -172,10 +172,11 @@ class AIListerGUI(ctk.CTk):
         self.title_entry = ctk.CTkEntry(scroll_frame, width=500, placeholder_text="Item title (80 chars max)")
         self.title_entry.pack(pady=5)
 
-        # Description
-        ctk.CTkLabel(scroll_frame, text="Description:").pack(anchor="w", pady=(10, 0))
+        # Description (AI-generated)
+        ctk.CTkLabel(scroll_frame, text="Description (AI-Generated):").pack(anchor="w", pady=(10, 0))
         self.description_text = ctk.CTkTextbox(scroll_frame, width=500, height=150)
         self.description_text.pack(pady=5)
+        self.description_text.insert("1.0", "Add photos to auto-generate description...")
 
         # Price
         price_frame = ctk.CTkFrame(scroll_frame)
@@ -222,10 +223,10 @@ class AIListerGUI(ctk.CTk):
         self.shipping_entry = ctk.CTkEntry(scroll_frame, width=100, placeholder_text="0.00 for free")
         self.shipping_entry.pack(anchor="w", pady=5)
 
-        # AI Enhance button
+        # AI Re-analyze button (auto-runs when photos added)
         ctk.CTkButton(
             scroll_frame,
-            text="✨ AI Enhance Listing",
+            text="🔄 Re-run AI Analysis",
             command=self.ai_enhance_listing,
             fg_color="purple",
             hover_color="darkviolet",
@@ -265,7 +266,10 @@ class AIListerGUI(ctk.CTk):
             self.photos.append(file)
             self.photo_listbox.insert(tk.END, Path(file).name)
 
-        self.update_status(f"Added {len(files)} photo(s)")
+        if files:
+            self.update_status(f"Added {len(files)} photo(s)")
+            # Auto-run AI analysis
+            self.ai_enhance_listing()
 
     def remove_photo(self):
         """Remove selected photo"""
@@ -279,26 +283,50 @@ class AIListerGUI(ctk.CTk):
     def ai_enhance_listing(self):
         """Use AI to enhance listing details"""
         if not self.photos:
-            messagebox.showwarning("No Photos", "Please add photos first!")
+            # Silently skip if no photos (called from add_photos)
             return
 
         self.update_status("🤖 AI analyzing photos...")
 
         def enhance():
             try:
-                # Detect attributes
+                # Validate photos exist
+                for photo_path in self.photos:
+                    if not os.path.exists(photo_path):
+                        raise FileNotFoundError(f"Photo not found: {photo_path}")
+
+                # Create photo objects
                 photo_objects = [
                     Photo(local_path=p, order=i, is_primary=(i == 0))
                     for i, p in enumerate(self.photos)
                 ]
 
+                # Detect attributes
                 attributes = detect_attributes(photo_objects)
+
+                # Check for errors in response
+                if "error" in attributes:
+                    error_msg = attributes.get("error", "Unknown error")
+                    self.after(0, lambda: messagebox.showerror(
+                        "AI Analysis Error",
+                        f"AI could not analyze the photos:\n\n{error_msg}\n\nPlease check:\n- API keys are set in .env\n- Photos are valid images\n- Internet connection"
+                    ))
+                    self.after(0, lambda: self.update_status(f"❌ AI failed: {error_msg}"))
+                    return
 
                 # Update UI on main thread
                 self.after(0, lambda: self.apply_ai_attributes(attributes))
 
+            except FileNotFoundError as e:
+                self.after(0, lambda: messagebox.showerror("File Error", str(e)))
+                self.after(0, lambda: self.update_status("❌ Photo file not found"))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("AI Error", f"Failed: {e}"))
+                import traceback
+                error_details = traceback.format_exc()
+                self.after(0, lambda: messagebox.showerror(
+                    "AI Error",
+                    f"Unexpected error:\n\n{str(e)}\n\nDetails:\n{error_details[:500]}"
+                ))
                 self.after(0, lambda: self.update_status(f"❌ AI failed: {e}"))
 
         threading.Thread(target=enhance, daemon=True).start()
@@ -334,20 +362,62 @@ class AIListerGUI(ctk.CTk):
             self.title_entry.delete(0, tk.END)
             self.title_entry.insert(0, title[:80])
 
-        # Generate description
+        # Generate comprehensive description
+        desc_parts = []
+
+        # Item overview
+        if "item_type" in attributes:
+            item_type = attributes["item_type"].get("specific_type", "item")
+            brand = attributes.get("brand", {}).get("name", "")
+            if brand:
+                desc_parts.append(f"This {brand} {item_type} is ")
+            else:
+                desc_parts.append(f"This {item_type} is ")
+
+        # Condition
         if "condition" in attributes:
-            desc = f"Condition: {attributes['condition'].get('overall', 'Good')}\n\n"
+            condition = attributes['condition'].get('overall', 'good')
+            if attributes['condition'].get('has_tags'):
+                desc_parts.append(f"in {condition} condition with original tags attached.")
+            else:
+                desc_parts.append(f"in {condition} condition.")
 
             if attributes['condition'].get('wear_notes'):
-                desc += f"{attributes['condition']['wear_notes']}\n\n"
+                desc_parts.append(f" {attributes['condition']['wear_notes']}")
 
-            if "features" in attributes and attributes["features"].get("special"):
-                desc += "Features:\n"
-                for feature in attributes["features"]["special"]:
-                    desc += f"• {feature}\n"
+        desc = " ".join(desc_parts) + "\n\n"
 
-            self.description_text.delete("1.0", tk.END)
-            self.description_text.insert("1.0", desc)
+        # Details section
+        details = []
+        if "size" in attributes and attributes["size"].get("size"):
+            details.append(f"Size: {attributes['size']['size']}")
+        if "color" in attributes and attributes["color"].get("description"):
+            details.append(f"Color: {attributes['color']['description']}")
+        elif "color" in attributes and attributes["color"].get("primary"):
+            details.append(f"Color: {attributes['color']['primary']}")
+        if "material" in attributes and attributes["material"].get("composition"):
+            details.append(f"Material: {attributes['material']['composition']}")
+
+        if details:
+            desc += "\n".join(details) + "\n\n"
+
+        # Features
+        if "features" in attributes and attributes["features"].get("special"):
+            desc += "Features:\n"
+            for feature in attributes["features"]["special"]:
+                desc += f"• {feature}\n"
+            desc += "\n"
+
+        # Style info
+        if "style" in attributes and attributes["style"].get("style_type"):
+            desc += f"Style: {attributes['style']['style_type']}\n"
+
+        # Market info
+        if "retail_info" in attributes and attributes["retail_info"].get("market_notes"):
+            desc += f"\n{attributes['retail_info']['market_notes']}\n"
+
+        self.description_text.delete("1.0", tk.END)
+        self.description_text.insert("1.0", desc.strip())
 
         # Set condition
         if "condition" in attributes and attributes["condition"].get("overall"):
