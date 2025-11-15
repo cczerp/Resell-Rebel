@@ -61,3 +61,8 @@ examples/output/
 *.jpeg
 *.png
 *.gif
+# Database files
+data/*.db
+data/*.db-journal
+*.sqlite
+*.sqlite3
