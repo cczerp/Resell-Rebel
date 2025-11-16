@@ -1070,18 +1070,37 @@ Return ONLY the description text, no JSON, no formatting, just the description."
         def save():
             try:
                 import uuid
+                import shutil
+                from pathlib import Path
 
                 # Create UUID for listing
                 listing_uuid = str(uuid.uuid4())
 
-                # Save to database
+                # Create permanent storage directory for draft photos
+                draft_photos_dir = Path("data/draft_photos") / listing_uuid
+                draft_photos_dir.mkdir(parents=True, exist_ok=True)
+
+                # Copy photos to permanent storage
+                permanent_photo_paths = []
+                for i, photo_path in enumerate(self.photos):
+                    # Get file extension
+                    ext = Path(photo_path).suffix
+                    # Create new filename with index
+                    new_filename = f"photo_{i:02d}{ext}"
+                    # Copy to permanent storage
+                    permanent_path = draft_photos_dir / new_filename
+                    shutil.copy2(photo_path, permanent_path)
+                    # Store the permanent path
+                    permanent_photo_paths.append(str(permanent_path))
+
+                # Save to database with permanent photo paths
                 listing_id = self.db.create_listing(
                     listing_uuid=listing_uuid,
                     title=self.title_entry.get(),
                     description=self.description_text.get("1.0", tk.END).strip(),
                     price=float(self.price_entry.get()) if self.price_entry.get() else 0.0,
                     condition=self.condition_var.get(),
-                    photos=self.photos,
+                    photos=permanent_photo_paths,
                     collectible_id=self.collectible_data.get("id") if self.collectible_data else None,
                     cost=float(self.cost_entry.get()) if self.cost_entry.get() else None,
                     attributes={
@@ -1092,10 +1111,10 @@ Return ONLY the description text, no JSON, no formatting, just the description."
                     }
                 )
 
-                self.after(0, lambda: self.update_status(f"✅ Draft saved (ID: {listing_id})"))
+                self.after(0, lambda: self.update_status(f"✅ Draft saved with {len(permanent_photo_paths)} photos (ID: {listing_id})"))
                 self.after(0, lambda: messagebox.showinfo(
                     "Draft Saved!",
-                    f"Listing saved as draft!\n\nDraft ID: {listing_id}\n\nYou can find it in the 'Drafts' tab."
+                    f"Listing saved as draft!\n\nDraft ID: {listing_id}\nPhotos: {len(permanent_photo_paths)} saved\n\nYou can find it in the 'Drafts' tab."
                 ))
 
                 # Clear form
@@ -1442,6 +1461,15 @@ Return ONLY the description text, no JSON, no formatting, just the description."
                 # Update database - mark draft as posted
                 self.db.update_listing_status(draft['id'], 'posted')
 
+                # Clean up draft photos directory (optional - keep photos for posted drafts if needed)
+                # Uncomment to delete photos after posting:
+                # import shutil
+                # from pathlib import Path
+                # if draft.get('listing_uuid'):
+                #     draft_photos_dir = Path("data/draft_photos") / draft['listing_uuid']
+                #     if draft_photos_dir.exists():
+                #         shutil.rmtree(draft_photos_dir)
+
                 # Show results
                 success_count = result["success_count"]
                 total = result["total_platforms"]
@@ -1467,6 +1495,16 @@ Return ONLY the description text, no JSON, no formatting, just the description."
             return
 
         try:
+            import shutil
+            from pathlib import Path
+
+            # Delete photos directory if it exists
+            if draft.get('listing_uuid'):
+                draft_photos_dir = Path("data/draft_photos") / draft['listing_uuid']
+                if draft_photos_dir.exists():
+                    shutil.rmtree(draft_photos_dir)
+                    print(f"Deleted draft photos directory: {draft_photos_dir}")
+
             # Delete from database
             cursor = self.db.conn.cursor()
             cursor.execute("DELETE FROM listings WHERE id = ?", (draft['id'],))
