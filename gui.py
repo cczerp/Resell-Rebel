@@ -8,6 +8,8 @@ Simple, beautiful GUI for cross-platform listing with collectible recognition.
 import os
 import sys
 import threading
+import json
+import requests
 from pathlib import Path
 from typing import List, Optional
 import tkinter as tk
@@ -225,27 +227,51 @@ class AIListerGUI(ctk.CTk):
         self.shipping_entry = ctk.CTkEntry(scroll_frame, width=100, placeholder_text="0.00 for free")
         self.shipping_entry.pack(anchor="w", pady=5)
 
-        # AI options
-        ai_options_frame = ctk.CTkFrame(scroll_frame)
-        ai_options_frame.pack(pady=10)
+        # AI Analysis section
+        ai_section = ctk.CTkFrame(scroll_frame)
+        ai_section.pack(pady=15, fill="x")
+
+        ctk.CTkLabel(
+            ai_section,
+            text="AI Analysis",
+            font=("Arial Bold", 14),
+        ).pack(pady=(5, 10))
 
         # GPT-4 fallback checkbox (disabled by default to save quota)
         self.enable_gpt4_fallback = tk.BooleanVar(value=False)
         ctk.CTkCheckBox(
-            ai_options_frame,
+            ai_section,
             text="Enable GPT-4 fallback (uses OpenAI quota)",
             variable=self.enable_gpt4_fallback,
         ).pack(pady=5)
 
-        # AI Re-analyze button (auto-runs when photos added)
+        # AI buttons frame
+        ai_buttons_frame = ctk.CTkFrame(ai_section)
+        ai_buttons_frame.pack(pady=10)
+
+        # Main AI Analysis button
         ctk.CTkButton(
-            scroll_frame,
-            text="🔄 Re-run AI Analysis",
+            ai_buttons_frame,
+            text="🤖 Analyze with AI",
             command=self.ai_enhance_listing,
             fg_color="purple",
             hover_color="darkviolet",
-            height=40,
-        ).pack(pady=10)
+            height=50,
+            width=200,
+            font=("Arial Bold", 14),
+        ).pack(side="left", padx=5)
+
+        # Regenerate Description button
+        ctk.CTkButton(
+            ai_buttons_frame,
+            text="🔄 Regenerate Description",
+            command=self.regenerate_description,
+            fg_color="orange",
+            hover_color="darkorange",
+            height=50,
+            width=200,
+            font=("Arial Bold", 14),
+        ).pack(side="left", padx=5)
 
         # Platform selection
         ctk.CTkLabel(scroll_frame, text="Post to Platforms:").pack(anchor="w", pady=(10, 0))
@@ -298,9 +324,7 @@ class AIListerGUI(ctk.CTk):
             self.photo_listbox.insert(tk.END, Path(file).name)
 
         if files:
-            self.update_status(f"Added {len(files)} photo(s)")
-            # Auto-run AI analysis
-            self.ai_enhance_listing()
+            self.update_status(f"Added {len(files)} photo(s) - Click 'Analyze with AI' to continue")
 
     def remove_photo(self):
         """Remove selected photo"""
@@ -491,6 +515,110 @@ class AIListerGUI(ctk.CTk):
         ai_used = attributes.get("ai_provider", "unknown").upper()
         self.update_status(f"✅ AI enhancement complete! (Used {ai_used})")
         messagebox.showinfo("Success", f"Listing enhanced with AI-detected attributes!\n\nAI Provider: {ai_used}")
+
+    def regenerate_description(self):
+        """Regenerate just the description using current form values"""
+        if not self.photos:
+            messagebox.showwarning("No Photos", "Please add photos first!")
+            return
+
+        self.update_status("🔄 Regenerating description...")
+
+        def regenerate():
+            try:
+                from src.collectibles.attribute_detector import AttributeDetector
+                import anthropic
+
+                # Get current form values
+                title = self.title_entry.get() or "Item"
+                brand = self.brand_entry.get() or "Unknown brand"
+                size = self.size_entry.get() or "N/A"
+                color = self.color_entry.get() or "N/A"
+                condition = self.condition_var.get()
+
+                # Create a focused prompt for description only
+                prompt = f"""Generate a compelling marketplace listing description for this item.
+
+Item Details:
+- Title: {title}
+- Brand: {brand}
+- Size: {size}
+- Color: {color}
+- Condition: {condition}
+
+Write a 2-3 paragraph description that:
+1. Starts with an engaging overview
+2. Highlights key features and condition details
+3. Mentions any wear or flaws honestly
+4. Ends with a selling point
+
+Return ONLY the description text, no JSON, no formatting, just the description."""
+
+                # Use Claude to generate
+                detector = AttributeDetector.from_env()
+
+                if not detector.anthropic_api_key:
+                    raise ValueError("No Anthropic API key found")
+
+                # Encode first photo
+                photo_b64 = detector._encode_image_to_base64(self.photos[0])
+                mime_type = detector._get_image_mime_type(self.photos[0])
+
+                headers = {
+                    "x-api-key": detector.anthropic_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                }
+
+                model = os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307")
+
+                payload = {
+                    "model": model,
+                    "max_tokens": 500,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": mime_type,
+                                        "data": photo_b64,
+                                    }
+                                }
+                            ],
+                        }
+                    ],
+                }
+
+                response = requests.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers=headers,
+                    json=payload,
+                    timeout=30,
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    new_description = result["content"][0]["text"]
+
+                    # Update description
+                    self.after(0, lambda: self.description_text.delete("1.0", tk.END))
+                    self.after(0, lambda: self.description_text.insert("1.0", new_description.strip()))
+                    self.after(0, lambda: self.update_status("✅ Description regenerated!"))
+                    self.after(0, lambda: messagebox.showinfo("Success", "New description generated!"))
+                else:
+                    error_msg = f"API error ({response.status_code}): {response.text[:200]}"
+                    self.after(0, lambda: messagebox.showerror("Error", f"Failed to regenerate:\n\n{error_msg}"))
+                    self.after(0, lambda: self.update_status("❌ Regeneration failed"))
+
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Error", f"Failed to regenerate description:\n\n{str(e)}"))
+                self.after(0, lambda: self.update_status(f"❌ Regeneration failed: {e}"))
+
+        threading.Thread(target=regenerate, daemon=True).start()
 
     def post_listing(self):
         """Post listing to selected platforms"""
