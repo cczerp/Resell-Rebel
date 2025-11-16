@@ -116,7 +116,31 @@ For Trading Cards:
 - Examine border consistency and centering
 - Look for print lines or color bleeds (signs of counterfeits)
 - Verify set symbols and card numbers
-- Check for signatures (real vs printed)
+- **SIGNATURE AUTHENTICATION** (CRITICAL):
+  * Real vs Stamped/Printed Signatures:
+    - REAL signatures: Ink bleeds into card stock, varies in thickness, has depth
+    - FAKE signatures: Perfectly uniform, no bleeding, flat/printed appearance
+    - Look for pen pressure variation (heavier at start, lighter at end)
+    - Check for natural flow and imperfections (real signatures aren't perfect)
+  * Ink Analysis:
+    - Real: Ink pooling, feathering, slight bleeding at edges
+    - Fake: Sharp edges, no bleeding, looks like it was printed
+    - Check if ink sits ON TOP of card vs absorbed INTO card
+  * Placement & Style:
+    - Where is signature located? (Some players always sign in specific spots)
+    - Size and boldness (some players sign small, others large)
+    - Angle and flow (natural hand movement vs stamped straight)
+    - Consistency with known examples of this player's signature
+  * Red Flags:
+    - Perfect uniformity = likely stamped/printed
+    - No ink variation = fake
+    - Signature looks too neat = suspicious
+    - Wrong placement for this player = fake
+    - No evidence of pen pressure = printed
+  * Confidence Scoring:
+    - HIGH confidence real: Ink bleeding, pressure variation, natural flow, correct placement
+    - MEDIUM confidence: Some indicators but unclear from photo
+    - LOW confidence real / HIGH confidence fake: Perfect uniformity, no bleeding, wrong style
 
 For Sports Memorabilia:
 - Verify official team logos (stitching, colors, placement)
@@ -193,6 +217,13 @@ Provide detailed analysis:
 7. **Authentication Notes:**
    - How to verify authenticity
    - Red flags or concerns
+   - **Signature Authentication** (if autographed):
+     * Is signature real or stamped/printed?
+     * Signature authenticity confidence (0.0 to 1.0)
+     * Ink characteristics (bleeding, pressure, depth)
+     * Placement and style analysis
+     * Comparison to known authentic examples
+     * Red flags identified
 
 8. **Additional Info:**
    - Why is this valuable/collectible?
@@ -226,12 +257,104 @@ Response format (respond with ONLY this JSON, no markdown):
   },
   "authentication": {
     "key_identifiers": ["1st edition stamp", "copyright date", "holo pattern"],
-    "red_flags": ["Check for reseals", "Verify holo authenticity"]
+    "red_flags": ["Check for reseals", "Verify holo authenticity"],
+    "has_signature": false,
+    "signature_analysis": null
   },
   "why_valuable": "First edition Charizard is one of the most iconic Pokemon cards",
   "what_collectors_want": "PSA graded, shadowless, centering",
   "best_platforms": ["eBay", "PWCC", "Heritage Auctions"],
   "reasoning": "Identified by distinctive Base Set artwork, 1st edition stamp visible"
+}
+
+Example with AUTOGRAPH (include signature analysis):
+{
+  "is_collectible": true,
+  "confidence_score": 0.85,
+  "category": "trading_cards",
+  "name": "Michael Jordan Signed Rookie Card",
+  "brand": "Upper Deck",
+  "year": 1986,
+  "condition": "Near Mint",
+  "rarity": "ultra rare",
+  "estimated_value_low": 5000,
+  "estimated_value_high": 15000,
+  "authentication": {
+    "key_identifiers": ["Upper Deck hologram", "card stock quality", "signature placement"],
+    "red_flags": ["Verify signature authenticity with PSA/JSA"],
+    "has_signature": true,
+    "signature_analysis": {
+      "is_authentic": true,
+      "confidence": 0.8,
+      "authenticity_reasoning": "Signature shows natural ink bleeding into card stock, pressure variation visible in strokes, placement consistent with known MJ autographs (lower right corner). Flow appears natural and matches authenticated examples.",
+      "ink_characteristics": {
+        "bleeding": "Visible ink feathering at edges - consistent with real Sharpie on card stock",
+        "pressure_variation": "Noticeable thickness changes in signature strokes - indicates hand pressure",
+        "depth": "Ink appears absorbed into card surface, not sitting on top"
+      },
+      "placement_style": {
+        "location": "Lower right corner",
+        "typical_for_player": true,
+        "size": "Medium-large (consistent with Jordan's known signing style)",
+        "angle": "Slight upward angle - natural hand movement"
+      },
+      "red_flags_found": [],
+      "authenticity_indicators": [
+        "Ink bleeding into card stock",
+        "Pressure variation in strokes",
+        "Correct placement for this player",
+        "Natural flow and imperfections",
+        "Matches known Jordan signature examples"
+      ],
+      "recommendation": "HIGH confidence authentic. Recommend PSA/JSA certification for maximum value."
+    }
+  },
+  "reasoning": "Autographed rookie card with strong signature authenticity indicators"
+}
+
+Example with FAKE/STAMPED signature:
+{
+  "is_collectible": true,
+  "confidence_score": 0.95,
+  "category": "trading_cards",
+  "name": "Derek Jeter Card with Stamped Signature",
+  "brand": "Topps",
+  "year": 2010,
+  "condition": "Near Mint",
+  "rarity": "common",
+  "estimated_value_low": 5,
+  "estimated_value_high": 15,
+  "authentication": {
+    "key_identifiers": ["Topps logo", "card number"],
+    "red_flags": ["Signature is stamped/printed, not hand-signed"],
+    "has_signature": true,
+    "signature_analysis": {
+      "is_authentic": false,
+      "confidence": 0.95,
+      "authenticity_reasoning": "Signature shows clear signs of being stamped/printed rather than hand-signed. Perfect uniformity in all strokes, no ink bleeding, sharp edges indicate printing process. This is a facsimile signature common on mass-produced cards.",
+      "ink_characteristics": {
+        "bleeding": "None - sharp edges indicate printed signature",
+        "pressure_variation": "None - perfectly uniform thickness throughout",
+        "depth": "Flat appearance - ink sits on surface, not absorbed"
+      },
+      "placement_style": {
+        "location": "Center of card",
+        "typical_for_player": false,
+        "size": "Perfectly consistent across multiple cards",
+        "angle": "Perfectly horizontal - unnatural for hand signing"
+      },
+      "red_flags_found": [
+        "Perfect uniformity in all strokes",
+        "No ink bleeding or feathering",
+        "Sharp edges - printed appearance",
+        "No evidence of pen pressure variation",
+        "Too perfect - real signatures have imperfections"
+      ],
+      "authenticity_indicators": [],
+      "recommendation": "This is a STAMPED/PRINTED facsimile signature. Value is for the card only, not the autograph. Worth $5-15, not autograph pricing."
+    }
+  },
+  "reasoning": "Card has printed facsimile signature, not hand-signed autograph"
 }
 
 If NOT a collectible, return:

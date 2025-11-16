@@ -823,6 +823,51 @@ Return ONLY the description text, no JSON, no formatting, just the description."
             if auth.get("key_identifiers"):
                 for identifier in auth["key_identifiers"][:3]:
                     desc_parts.append(f"• {identifier}")
+
+            # Signature Analysis (CRITICAL for autographed items)
+            if auth.get("has_signature") and auth.get("signature_analysis"):
+                sig = auth["signature_analysis"]
+                desc_parts.append("")
+                desc_parts.append("✍️ SIGNATURE AUTHENTICATION:")
+
+                # Authenticity verdict
+                if sig.get("is_authentic"):
+                    confidence_pct = int(sig.get("confidence", 0) * 100)
+                    desc_parts.append(f"✅ LIKELY AUTHENTIC ({confidence_pct}% confidence)")
+                else:
+                    confidence_pct = int(sig.get("confidence", 0) * 100)
+                    desc_parts.append(f"❌ LIKELY FAKE/STAMPED ({confidence_pct}% confidence)")
+
+                # Key findings
+                if sig.get("authenticity_reasoning"):
+                    desc_parts.append(f"Analysis: {sig['authenticity_reasoning']}")
+
+                # Ink characteristics
+                if sig.get("ink_characteristics"):
+                    ink = sig["ink_characteristics"]
+                    desc_parts.append("Ink Analysis:")
+                    if ink.get("bleeding"):
+                        desc_parts.append(f"  • Bleeding: {ink['bleeding']}")
+                    if ink.get("pressure_variation"):
+                        desc_parts.append(f"  • Pressure: {ink['pressure_variation']}")
+
+                # Placement analysis
+                if sig.get("placement_style"):
+                    place = sig["placement_style"]
+                    if place.get("location"):
+                        typical = "✓" if place.get("typical_for_player") else "⚠"
+                        desc_parts.append(f"Placement: {place['location']} {typical}")
+
+                # Red flags
+                if sig.get("red_flags_found") and len(sig["red_flags_found"]) > 0:
+                    desc_parts.append("⚠️ RED FLAGS:")
+                    for flag in sig["red_flags_found"][:3]:
+                        desc_parts.append(f"  • {flag}")
+
+                # Recommendation
+                if sig.get("recommendation"):
+                    desc_parts.append(f"Recommendation: {sig['recommendation']}")
+
             desc_parts.append("")
 
         # Condition & Grading
@@ -877,6 +922,19 @@ Return ONLY the description text, no JSON, no formatting, just the description."
             f"Condition: {analysis.get('condition', 'Unknown')}",
             f"Estimated Value: ${analysis.get('estimated_value_low', 0)} - ${analysis.get('estimated_value_high', 0)}",
         ]
+
+        # Add signature analysis to summary if present
+        if analysis.get("authentication", {}).get("has_signature"):
+            sig = analysis["authentication"].get("signature_analysis", {})
+            if sig:
+                if sig.get("is_authentic"):
+                    conf = int(sig.get("confidence", 0) * 100)
+                    summary_parts.append(f"\n✍️ Signature: LIKELY AUTHENTIC ({conf}% confidence)")
+                else:
+                    conf = int(sig.get("confidence", 0) * 100)
+                    summary_parts.append(f"\n✍️ Signature: LIKELY FAKE/STAMPED ({conf}% confidence)")
+                if sig.get("recommendation"):
+                    summary_parts.append(f"   {sig['recommendation']}")
 
         if collectible_id:
             summary_parts.append(f"\n✅ Saved to database (ID: {collectible_id})")
