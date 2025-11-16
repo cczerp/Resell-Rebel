@@ -245,32 +245,54 @@ class AIListerGUI(ctk.CTk):
             variable=self.enable_gpt4_fallback,
         ).pack(pady=5)
 
-        # AI buttons frame
-        ai_buttons_frame = ctk.CTkFrame(ai_section)
-        ai_buttons_frame.pack(pady=10)
+        # All buttons in one horizontal row
+        all_buttons_frame = ctk.CTkFrame(ai_section)
+        all_buttons_frame.pack(pady=10)
 
-        # Main AI Analysis button
+        # Left side - Action buttons
         ctk.CTkButton(
-            ai_buttons_frame,
+            all_buttons_frame,
+            text="💾 Save as Draft",
+            command=self.save_as_draft,
+            fg_color="gray",
+            hover_color="darkgray",
+            height=50,
+            width=180,
+            font=("Arial Bold", 13),
+        ).pack(side="left", padx=5)
+
+        ctk.CTkButton(
+            all_buttons_frame,
+            text="🚀 Post Now",
+            command=self.post_listing,
+            fg_color="green",
+            hover_color="darkgreen",
+            height=50,
+            width=180,
+            font=("Arial Bold", 13),
+        ).pack(side="left", padx=5)
+
+        # Right side - AI buttons
+        ctk.CTkButton(
+            all_buttons_frame,
             text="🤖 Analyze with AI",
             command=self.ai_enhance_listing,
             fg_color="purple",
             hover_color="darkviolet",
             height=50,
-            width=200,
-            font=("Arial Bold", 14),
+            width=180,
+            font=("Arial Bold", 13),
         ).pack(side="left", padx=5)
 
-        # Regenerate Description button
         ctk.CTkButton(
-            ai_buttons_frame,
+            all_buttons_frame,
             text="🔄 Regenerate Description",
             command=self.regenerate_description,
             fg_color="orange",
             hover_color="darkorange",
             height=50,
             width=200,
-            font=("Arial Bold", 14),
+            font=("Arial Bold", 13),
         ).pack(side="left", padx=5)
 
         # Platform selection
@@ -283,34 +305,6 @@ class AIListerGUI(ctk.CTk):
 
         ctk.CTkCheckBox(platform_frame, text="eBay", variable=self.ebay_var).pack(side="left", padx=10)
         ctk.CTkCheckBox(platform_frame, text="Mercari", variable=self.mercari_var).pack(side="left", padx=10)
-
-        # Action buttons frame
-        action_frame = ctk.CTkFrame(scroll_frame)
-        action_frame.pack(pady=20)
-
-        # Save as Draft button
-        ctk.CTkButton(
-            action_frame,
-            text="💾 Save as Draft",
-            command=self.save_as_draft,
-            fg_color="gray",
-            hover_color="darkgray",
-            height=50,
-            width=200,
-            font=("Arial Bold", 14),
-        ).pack(side="left", padx=10)
-
-        # Post Now button
-        ctk.CTkButton(
-            action_frame,
-            text="🚀 Post Now",
-            command=self.post_listing,
-            fg_color="green",
-            hover_color="darkgreen",
-            height=50,
-            width=200,
-            font=("Arial Bold", 14),
-        ).pack(side="left", padx=10)
 
     def add_photos(self):
         """Add photos to listing"""
