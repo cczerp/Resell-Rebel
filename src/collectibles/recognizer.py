@@ -89,42 +89,79 @@ class CollectibleRecognizer:
             image_contents.append(image_dict)
 
         # Build comprehensive collectibles analysis prompt
-        prompt = """Analyze these images to determine if this is a COLLECTIBLE item.
+        prompt = """🔍 EXPERT COLLECTIBLE AUTHENTICATION & GRADING
 
-⚠️ CRITICAL RULES:
-1. ANY trading card (sports, Pokemon, Magic, etc.) = COLLECTIBLE (even commons!)
-2. ANY item with official sports team logos (MLB, NBA, NFL, NHL, etc.) = COLLECTIBLE
-3. ANY item with team names (Cubs, Yankees, Lakers, etc.) = COLLECTIBLE
-4. Cards in protective cases/sleeves = COLLECTIBLE
-5. Vintage sports apparel/jerseys = COLLECTIBLE
-6. Pokemon/Magic/Yu-Gi-Oh cards = COLLECTIBLE
+You are an expert collectibles authenticator and grader. Your job is to:
+1. Verify if this is a genuine collectible
+2. Authenticate it (check for counterfeits)
+3. Identify the specific variant
+4. Grade the condition
+5. Assess market value
 
-SPORTS ITEMS ARE ALWAYS COLLECTIBLES:
-- MLB logos (Chicago Cubs, New York Yankees, etc.) = COLLECTIBLE
-- NBA logos (Lakers, Bulls, etc.) = COLLECTIBLE
-- NFL logos (Cowboys, Patriots, etc.) = COLLECTIBLE
-- NHL logos = COLLECTIBLE
-- College sports logos = COLLECTIBLE
-- Vintage team apparel = COLLECTIBLE
+⚠️ CRITICAL DETECTION RULES:
+- ANY trading card (sports, Pokemon, Magic, etc.) = COLLECTIBLE (even commons!)
+- ANY item with official sports team logos (MLB, NBA, NFL, NHL, etc.) = COLLECTIBLE
+- ANY team names (Cubs, Yankees, Lakers, etc.) = COLLECTIBLE
+- Cards in protective cases/sleeves = COLLECTIBLE
+- Vintage sports apparel/jerseys = COLLECTIBLE
 - Autographed items = COLLECTIBLE
 
-Other Collectibles:
-- Trading cards (sports cards - baseball, basketball, football, hockey, soccer, Pokemon, Magic, Yu-Gi-Oh, etc.)
-  * Even if in a protective case or sleeve, these are collectibles
-  * Look for player names, card brands (Topps, Panini, Upper Deck, etc.)
-  * Check for rookie cards, autographs, special editions
-- Action figures and toys (vintage, limited edition)
-- Coins and currency
-- Stamps
-- Comic books
-- Video games (especially sealed, rare, or retro)
-- Vintage clothing/streetwear (Supreme, vintage Nike, concert tees, etc.)
-- Vinyl records
-- Movie/sports memorabilia
-- Antiques and vintage items
-- Limited edition sneakers
-- Designer items (vintage Gucci, Louis Vuitton, etc.)
-- Collectible books (first editions, signed)
+🔍 AUTHENTICATION CHECKLIST:
+
+For Trading Cards:
+- Check for authentic holo pattern (not printed-on)
+- Verify copyright dates and trademarks
+- Look for edition stamps (1st Edition, Shadowless, etc.)
+- Check card stock quality and thickness
+- Examine border consistency and centering
+- Look for print lines or color bleeds (signs of counterfeits)
+- Verify set symbols and card numbers
+- Check for signatures (real vs printed)
+
+For Sports Memorabilia:
+- Verify official team logos (stitching, colors, placement)
+- Check tags and labels (brand, size, care instructions)
+- Look for authentication holograms or certificates
+- Examine stitching quality (official vs bootleg)
+- Check jersey numbers and player names
+- Verify era-appropriate details
+
+For Toys/Figures:
+- Check for official brand markings
+- Verify packaging authenticity
+- Look for production stamps and dates
+- Check paint quality and mold details
+- Verify accessories and completeness
+
+🎯 VARIANT IDENTIFICATION:
+
+Identify specific variant details:
+- Edition (1st Edition, Limited, Special, etc.)
+- Print run or production year
+- Color variations
+- Factory errors (valuable!)
+- Regional differences
+- Packaging variations
+- Special features (holo, foil, embossed, etc.)
+
+📊 CONDITION GRADING (be detailed):
+
+Grade based on:
+- Corners: Sharp, slightly worn, rounded, damaged
+- Edges: Clean, whitening, chipping, peeling
+- Surface: Pristine, minor scratches, creases, stains
+- Centering: Perfectly centered, off-center, badly off-center
+- Overall cleanliness
+- Original packaging condition
+
+Grading scale:
+- Gem Mint (10): Perfect, no flaws
+- Mint (9-9.5): Nearly perfect, minor manufacturing flaws only
+- Near Mint (7-8.5): Excellent, minimal wear
+- Excellent (6-6.5): Light wear, still great
+- Good (4-5.5): Noticeable wear but complete
+- Fair (2-3.5): Heavy wear, possible damage
+- Poor (1): Severe damage
 
 Provide detailed analysis:
 

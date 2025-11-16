@@ -62,6 +62,8 @@ class AIListerGUI(ctk.CTk):
         self.photos = []
         self.current_listing = None
         self.collectible_data = None
+        self.is_collectible = False  # Track if Gemini detected collectible
+        self.gemini_analysis = None  # Store Gemini's analysis
 
         # Create UI
         self.create_widgets()
@@ -237,11 +239,24 @@ class AIListerGUI(ctk.CTk):
             font=("Arial Bold", 14),
         ).pack(pady=(5, 10))
 
+        # Collectible Indicator Light
+        indicator_frame = ctk.CTkFrame(ai_section)
+        indicator_frame.pack(pady=5)
+
+        ctk.CTkLabel(indicator_frame, text="Collectible Status:").pack(side="left", padx=5)
+        self.collectible_indicator = ctk.CTkLabel(
+            indicator_frame,
+            text="⚪ Not Analyzed",
+            font=("Arial Bold", 12),
+            text_color="gray",
+        )
+        self.collectible_indicator.pack(side="left", padx=5)
+
         # GPT-4 fallback checkbox (disabled by default to save quota)
         self.enable_gpt4_fallback = tk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             ai_section,
-            text="Enable GPT-4 fallback (uses OpenAI quota)",
+            text="Enable GPT-4 fallback for deep analysis (uses OpenAI quota)",
             variable=self.enable_gpt4_fallback,
         ).pack(pady=5)
 
@@ -257,9 +272,9 @@ class AIListerGUI(ctk.CTk):
             fg_color="gray",
             hover_color="darkgray",
             height=50,
-            width=180,
-            font=("Arial Bold", 13),
-        ).pack(side="left", padx=5)
+            width=170,
+            font=("Arial Bold", 12),
+        ).pack(side="left", padx=3)
 
         ctk.CTkButton(
             all_buttons_frame,
@@ -268,11 +283,11 @@ class AIListerGUI(ctk.CTk):
             fg_color="green",
             hover_color="darkgreen",
             height=50,
-            width=180,
-            font=("Arial Bold", 13),
-        ).pack(side="left", padx=5)
+            width=170,
+            font=("Arial Bold", 12),
+        ).pack(side="left", padx=3)
 
-        # Right side - AI buttons
+        # Middle - Main AI Analysis (Gemini)
         ctk.CTkButton(
             all_buttons_frame,
             text="🤖 Analyze with AI",
@@ -280,20 +295,35 @@ class AIListerGUI(ctk.CTk):
             fg_color="purple",
             hover_color="darkviolet",
             height=50,
-            width=180,
-            font=("Arial Bold", 13),
-        ).pack(side="left", padx=5)
+            width=170,
+            font=("Arial Bold", 12),
+        ).pack(side="left", padx=3)
 
+        # Deep Collectible Analysis (Claude) - initially disabled
+        self.deep_analysis_button = ctk.CTkButton(
+            all_buttons_frame,
+            text="🔍 Identify Collectible",
+            command=self.deep_collectible_analysis,
+            fg_color="#FF6B00",  # Orange
+            hover_color="#CC5500",
+            height=50,
+            width=170,
+            font=("Arial Bold", 12),
+            state="disabled",  # Disabled until Gemini detects collectible
+        )
+        self.deep_analysis_button.pack(side="left", padx=3)
+
+        # Regenerate description
         ctk.CTkButton(
             all_buttons_frame,
-            text="🔄 Regenerate Description",
+            text="🔄 Regenerate Desc",
             command=self.regenerate_description,
             fg_color="orange",
             hover_color="darkorange",
             height=50,
-            width=200,
-            font=("Arial Bold", 13),
-        ).pack(side="left", padx=5)
+            width=170,
+            font=("Arial Bold", 12),
+        ).pack(side="left", padx=3)
 
         # Platform selection
         ctk.CTkLabel(scroll_frame, text="Post to Platforms:").pack(anchor="w", pady=(10, 0))
@@ -330,12 +360,12 @@ class AIListerGUI(ctk.CTk):
             self.update_status("Photo removed")
 
     def ai_enhance_listing(self):
-        """Use AI to enhance listing details"""
+        """Use Gemini AI for fast item classification (PRIMARY ANALYZER)"""
         if not self.photos:
-            # Silently skip if no photos (called from add_photos)
+            messagebox.showwarning("No Photos", "Please add photos first!")
             return
 
-        self.update_status("🤖 AI analyzing photos...")
+        self.update_status("🤖 Analyzing with Gemini AI...")
 
         def enhance():
             try:
@@ -350,52 +380,29 @@ class AIListerGUI(ctk.CTk):
                     for i, p in enumerate(self.photos)
                 ]
 
-                # Detect attributes
-                from src.collectibles.attribute_detector import AttributeDetector
-                detector = AttributeDetector.from_env()
+                # Use Gemini for fast classification
+                from src.ai.gemini_classifier import GeminiClassifier
+                classifier = GeminiClassifier.from_env()
 
-                # Check if GPT-4 fallback is enabled
-                use_fallback = self.enable_gpt4_fallback.get()
+                self.after(0, lambda: self.update_status("🤖 Gemini analyzing..."))
+                analysis = classifier.analyze_item(photo_objects)
 
-                # Try Claude first
-                self.after(0, lambda: self.update_status("🤖 Using Claude AI..."))
-                attributes = detector.detect_attributes_claude(photo_objects)
+                # Check for errors
+                if "error" in analysis:
+                    error_msg = analysis.get("error", "Unknown error")
+                    self.after(0, lambda: messagebox.showerror(
+                        "Gemini AI Error",
+                        f"Gemini could not analyze the photos:\n\n{error_msg}\n\nPlease check:\n- GOOGLE_AI_API_KEY or GEMINI_API_KEY is set in .env\n- Photos are valid images\n- Internet connection"
+                    ))
+                    self.after(0, lambda: self.update_status(f"❌ Gemini failed: {error_msg}"))
+                    return
 
-                # Check for errors in Claude response
-                if "error" in attributes:
-                    claude_error = attributes.get("error", "Unknown error")
-                    raw_response = attributes.get("raw_response", "")
-
-                    # Show detailed error with raw response if available
-                    error_details = f"{claude_error}"
-                    if raw_response:
-                        error_details += f"\n\n{raw_response}"
-
-                    # Try GPT-4 fallback if enabled
-                    if use_fallback:
-                        self.after(0, lambda: self.update_status("🔄 Claude failed, trying GPT-4..."))
-                        attributes = detector.detect_attributes_openai(photo_objects)
-
-                        # Check if GPT-4 also failed
-                        if "error" in attributes:
-                            gpt4_error = attributes.get("error", "Unknown error")
-                            self.after(0, lambda: messagebox.showerror(
-                                "AI Analysis Error",
-                                f"Both AIs failed:\n\nClaude: {claude_error}\nGPT-4: {gpt4_error}\n\nPlease check your API keys in .env"
-                            ))
-                            self.after(0, lambda: self.update_status(f"❌ Both AIs failed"))
-                            return
-                    else:
-                        # No fallback - show Claude error with details
-                        self.after(0, lambda ed=error_details: messagebox.showerror(
-                            "Claude AI Error",
-                            f"Claude could not analyze the photos:\n\n{ed}\n\nPlease check:\n- ANTHROPIC_API_KEY is set in .env\n- Photos are valid images\n- Internet connection\n\nTip: Enable 'GPT-4 fallback' checkbox if you want to try GPT-4 when Claude fails."
-                        ))
-                        self.after(0, lambda: self.update_status(f"❌ Claude failed: {claude_error}"))
-                        return
+                # Store analysis
+                self.gemini_analysis = analysis
+                self.is_collectible = analysis.get("collectible", False)
 
                 # Update UI on main thread
-                self.after(0, lambda: self.apply_ai_attributes(attributes))
+                self.after(0, lambda: self.apply_gemini_classification(analysis))
 
             except FileNotFoundError as e:
                 self.after(0, lambda: messagebox.showerror("File Error", str(e)))
@@ -411,8 +418,76 @@ class AIListerGUI(ctk.CTk):
 
         threading.Thread(target=enhance, daemon=True).start()
 
+    def apply_gemini_classification(self, analysis):
+        """Apply Gemini's classification results to form"""
+        # Fill in basic fields
+        if analysis.get("brand"):
+            self.brand_entry.delete(0, tk.END)
+            self.brand_entry.insert(0, analysis["brand"])
+
+        if analysis.get("size"):
+            self.size_entry.delete(0, tk.END)
+            self.size_entry.insert(0, analysis["size"])
+
+        if analysis.get("color"):
+            self.color_entry.delete(0, tk.END)
+            self.color_entry.insert(0, analysis["color"])
+
+        # Use suggested title
+        if analysis.get("suggested_title"):
+            self.title_entry.delete(0, tk.END)
+            self.title_entry.insert(0, analysis["suggested_title"][:80])
+
+        # Use Gemini's description
+        if analysis.get("description"):
+            self.description_text.delete("1.0", tk.END)
+            self.description_text.insert("1.0", analysis["description"])
+
+        # Set condition
+        if analysis.get("condition"):
+            condition = analysis["condition"].replace(" ", "_").lower()
+            if condition in ["new", "like_new", "excellent", "good", "fair", "poor"]:
+                self.condition_var.set(condition)
+
+        # Set suggested price
+        if analysis.get("suggested_price") and analysis["suggested_price"] > 0:
+            self.price_entry.delete(0, tk.END)
+            self.price_entry.insert(0, str(analysis["suggested_price"]))
+
+        # Update collectible indicator
+        is_collectible = analysis.get("collectible", False)
+        confidence = analysis.get("collectible_confidence", 0.0)
+
+        if is_collectible:
+            # Turn on collectible light
+            self.collectible_indicator.configure(
+                text=f"🟢 COLLECTIBLE DETECTED ({confidence:.0%} confidence)",
+                text_color="green"
+            )
+            # Enable deep analysis button
+            self.deep_analysis_button.configure(state="normal")
+
+            # Show notification
+            indicators = analysis.get("collectible_indicators", [])
+            indicator_text = "\n".join([f"• {ind}" for ind in indicators[:5]])
+
+            messagebox.showinfo(
+                "Collectible Detected!",
+                f"Gemini detected this may be a COLLECTIBLE item!\n\nConfidence: {confidence:.0%}\n\nIndicators:\n{indicator_text}\n\nClick '🔍 Identify Collectible' for deep authentication analysis."
+            )
+        else:
+            # Turn off collectible light
+            self.collectible_indicator.configure(
+                text="⚪ Standard Item (not collectible)",
+                text_color="gray"
+            )
+            # Keep deep analysis button disabled
+            self.deep_analysis_button.configure(state="disabled")
+
+        self.update_status(f"✅ Gemini classification complete! ({analysis.get('category', 'unknown')})")
+
     def apply_ai_attributes(self, attributes):
-        """Apply AI-detected attributes to form"""
+        """LEGACY: Apply Claude AttributeDetector results (kept for regenerate_description)"""
         if "error" in attributes:
             messagebox.showwarning("AI Warning", f"Partial results: {attributes['error']}")
 
@@ -613,6 +688,194 @@ Return ONLY the description text, no JSON, no formatting, just the description."
                 self.after(0, lambda: self.update_status(f"❌ Regeneration failed: {e}"))
 
         threading.Thread(target=regenerate, daemon=True).start()
+
+    def deep_collectible_analysis(self):
+        """
+        Deep collectible analysis using Claude (EXPERT MODE).
+
+        This runs AFTER Gemini has detected a collectible.
+        Claude performs expert-level:
+        - Authenticity checks
+        - Variant identification
+        - Condition grading
+        - Value justification
+        - Database-level structuring
+        """
+        if not self.photos:
+            messagebox.showwarning("No Photos", "Please add photos first!")
+            return
+
+        if not self.is_collectible:
+            messagebox.showinfo(
+                "Not a Collectible",
+                "Gemini didn't detect this as a collectible.\n\nRun 'Analyze with AI' first, or this item may not be a collectible."
+            )
+            return
+
+        self.update_status("🔍 Running deep collectible analysis with Claude...")
+
+        def analyze():
+            try:
+                # Create photo objects
+                photo_objects = [
+                    Photo(url="", local_path=p, order=i, is_primary=(i == 0))
+                    for i, p in enumerate(self.photos)
+                ]
+
+                # Use Claude for deep collectible recognition
+                from src.collectibles.recognizer import CollectibleRecognizer
+                recognizer = CollectibleRecognizer.from_env()
+
+                # Check if GPT-4 fallback is enabled
+                use_fallback = self.enable_gpt4_fallback.get()
+
+                self.after(0, lambda: self.update_status("🔍 Claude analyzing collectible..."))
+                is_collectible, collectible_id, analysis = recognizer.identify_and_store(
+                    photo_objects,
+                    force_gpt4=use_fallback
+                )
+
+                # Check for errors
+                if "error" in analysis:
+                    error_msg = analysis.get("error", "Unknown error")
+                    self.after(0, lambda: messagebox.showerror(
+                        "Deep Analysis Error",
+                        f"Claude could not complete deep analysis:\n\n{error_msg}\n\nPlease check:\n- ANTHROPIC_API_KEY is set in .env\n- Photos are clear and show item details\n- Internet connection"
+                    ))
+                    self.after(0, lambda: self.update_status(f"❌ Deep analysis failed: {error_msg}"))
+                    return
+
+                # Store collectible data
+                self.collectible_data = analysis
+
+                # Update UI on main thread
+                self.after(0, lambda: self.apply_deep_collectible_analysis(
+                    is_collectible, collectible_id, analysis
+                ))
+
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                self.after(0, lambda: messagebox.showerror(
+                    "Deep Analysis Error",
+                    f"Unexpected error:\n\n{str(e)}\n\nDetails:\n{error_details[:500]}"
+                ))
+                self.after(0, lambda: self.update_status(f"❌ Deep analysis failed: {e}"))
+
+        threading.Thread(target=analyze, daemon=True).start()
+
+    def apply_deep_collectible_analysis(self, is_collectible, collectible_id, analysis):
+        """Apply deep collectible analysis results to form"""
+        if not is_collectible:
+            messagebox.showinfo(
+                "Not a Collectible",
+                "After deep analysis, Claude determined this is NOT a collectible item.\n\n" +
+                f"Reasoning: {analysis.get('reasoning', 'No specific reason provided')}"
+            )
+            # Turn off collectible indicator
+            self.collectible_indicator.configure(
+                text="⚪ Not a Collectible (verified)",
+                text_color="gray"
+            )
+            return
+
+        # Collectible confirmed!
+        # Update indicator with higher confidence
+        confidence = analysis.get("confidence_score", 0.0)
+        self.collectible_indicator.configure(
+            text=f"🟢 COLLECTIBLE VERIFIED ({confidence:.0%} confidence)",
+            text_color="green"
+        )
+
+        # Update title with collector-grade details
+        if analysis.get("name"):
+            suggested_title = analysis["name"]
+            if analysis.get("brand"):
+                suggested_title = f"{analysis['brand']} {suggested_title}"
+            if analysis.get("year"):
+                suggested_title += f" ({analysis['year']})"
+
+            self.title_entry.delete(0, tk.END)
+            self.title_entry.insert(0, suggested_title[:80])
+
+        # Update description with detailed collectible info
+        desc_parts = []
+
+        # Opening
+        desc_parts.append(f"{analysis.get('name', 'Collectible item')} - {analysis.get('why_valuable', 'Highly sought after collectible')}")
+        desc_parts.append("")
+
+        # Authentication
+        if analysis.get("authentication"):
+            auth = analysis["authentication"]
+            desc_parts.append("🔍 AUTHENTICATION:")
+            if auth.get("key_identifiers"):
+                for identifier in auth["key_identifiers"][:3]:
+                    desc_parts.append(f"• {identifier}")
+            desc_parts.append("")
+
+        # Condition & Grading
+        if analysis.get("condition"):
+            desc_parts.append(f"📊 CONDITION: {analysis['condition']}")
+            desc_parts.append("")
+
+        # Rarity
+        if analysis.get("rarity"):
+            desc_parts.append(f"💎 RARITY: {analysis['rarity'].upper()}")
+            desc_parts.append("")
+
+        # Value
+        if analysis.get("estimated_value_low") and analysis.get("estimated_value_high"):
+            desc_parts.append(
+                f"💰 ESTIMATED VALUE: ${analysis['estimated_value_low']} - ${analysis['estimated_value_high']}"
+            )
+            if analysis.get("market_trend"):
+                desc_parts.append(f"📈 Market Trend: {analysis['market_trend']}")
+            desc_parts.append("")
+
+        # What collectors want
+        if analysis.get("what_collectors_want"):
+            desc_parts.append(f"What collectors look for: {analysis['what_collectors_want']}")
+            desc_parts.append("")
+
+        # Best platforms
+        if analysis.get("best_platforms"):
+            desc_parts.append(f"Best platforms to sell: {', '.join(analysis['best_platforms'][:3])}")
+
+        self.description_text.delete("1.0", tk.END)
+        self.description_text.insert("1.0", "\n".join(desc_parts))
+
+        # Update price with estimated value
+        if analysis.get("estimated_value_low") and analysis.get("estimated_value_high"):
+            # Use midpoint as suggested price
+            suggested_price = (analysis["estimated_value_low"] + analysis["estimated_value_high"]) / 2
+            self.price_entry.delete(0, tk.END)
+            self.price_entry.insert(0, f"{suggested_price:.2f}")
+
+        # Update condition
+        if analysis.get("condition"):
+            condition = analysis["condition"].replace(" ", "_").lower()
+            if condition in ["new", "like_new", "excellent", "good", "fair", "poor"]:
+                self.condition_var.set(condition)
+
+        # Show summary
+        summary_parts = [
+            f"Item: {analysis.get('name', 'Unknown')}",
+            f"Category: {analysis.get('category', 'Unknown')}",
+            f"Rarity: {analysis.get('rarity', 'Unknown')}",
+            f"Condition: {analysis.get('condition', 'Unknown')}",
+            f"Estimated Value: ${analysis.get('estimated_value_low', 0)} - ${analysis.get('estimated_value_high', 0)}",
+        ]
+
+        if collectible_id:
+            summary_parts.append(f"\n✅ Saved to database (ID: {collectible_id})")
+
+        messagebox.showinfo(
+            "Deep Analysis Complete!",
+            "Claude has verified this is a COLLECTIBLE!\n\n" + "\n".join(summary_parts)
+        )
+
+        self.update_status(f"✅ Deep collectible analysis complete! ({analysis.get('category', 'collectible')})")
 
     def post_listing(self):
         """Post listing to selected platforms"""
