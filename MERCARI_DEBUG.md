@@ -1,5 +1,31 @@
 # Mercari Automation Debugging Guide
 
+## ⭐ BEST SOLUTION: Use Cookie-Based Login (Bypasses Bot Detection!)
+
+Instead of logging in every time (which Mercari detects as automation), save your login session once:
+
+### Step 1: Save Your Cookies
+```bash
+python save_mercari_cookies.py
+```
+
+This will:
+1. Open a browser window
+2. Let YOU log in manually to Mercari (like a real person)
+3. Save your session cookies to `data/mercari_cookies.json`
+
+### Step 2: Done!
+From now on, the automation will use your saved cookies instead of logging in. This bypasses bot detection completely! 🎉
+
+**When to refresh cookies:**
+- If you get logged out
+- If posting starts failing
+- Every few weeks (cookies expire)
+
+Just run `python save_mercari_cookies.py` again to refresh.
+
+---
+
 ## Running Browser in Visible Mode
 
 To see the browser while it's running (for debugging login issues), add this to your `.env` file:

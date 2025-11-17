@@ -212,6 +212,7 @@ class MercariAutomationAdapter:
         email: str,
         password: str,
         headless: bool = True,
+        cookies_file: Optional[str] = None,
     ):
         """
         Initialize Mercari automation adapter.
@@ -220,10 +221,12 @@ class MercariAutomationAdapter:
             email: Mercari account email
             password: Mercari account password
             headless: Run browser in headless mode
+            cookies_file: Path to saved cookies file (bypasses login)
         """
         self.email = email
         self.password = password
         self.headless = headless
+        self.cookies_file = cookies_file
         self.browser = None
         self.page = None
 
@@ -342,6 +345,35 @@ class MercariAutomationAdapter:
                     pass
                 raise Exception(f"Login error: {str(e)}")
 
+    def _save_cookies(self):
+        """Save browser cookies to file for future sessions"""
+        if not self.cookies_file:
+            self.cookies_file = "data/mercari_cookies.json"
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.cookies_file), exist_ok=True)
+
+        # Get cookies from browser context
+        cookies = self.page.context.cookies()
+
+        # Save to file
+        with open(self.cookies_file, 'w') as f:
+            json.dump(cookies, f)
+
+        print(f"💾 Saved cookies to {self.cookies_file}")
+
+    def _load_cookies(self):
+        """Load cookies from file"""
+        if not os.path.exists(self.cookies_file):
+            return
+
+        with open(self.cookies_file, 'r') as f:
+            cookies = json.load(f)
+
+        # Add cookies to browser context
+        self.page.context.add_cookies(cookies)
+        print(f"✅ Loaded {len(cookies)} cookies")
+
     def publish_listing(self, listing: UnifiedListing) -> Dict[str, str]:
         """
         Publish listing to Mercari using browser automation.
@@ -355,22 +387,25 @@ class MercariAutomationAdapter:
         sync_playwright = self._ensure_playwright()
 
         with sync_playwright() as p:
-            # Launch browser with enhanced anti-detection settings
+            # Launch browser with anti-detection settings
+            launch_args = [
+                '--disable-blink-features=AutomationControlled',  # Hide automation
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+            ]
+
+            # Only add headless-specific flags when in headless mode
+            if self.headless:
+                launch_args.extend([
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                ])
+
             self.browser = p.chromium.launch(
                 headless=self.headless,
-                args=[
-                    '--disable-blink-features=AutomationControlled',  # Hide automation
-                    '--disable-features=IsolateOrigins,site-per-process',
-                    '--disable-site-isolation-trials',
-                    '--no-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-setuid-sandbox',
-                    '--disable-accelerated-2d-canvas',
-                    '--no-first-run',
-                    '--no-zygote',
-                    '--single-process',  # Less detectable
-                    '--disable-gpu',
-                ]
+                args=launch_args,
+                # Enable downloads and other features to appear more normal
+                downloads_path='./downloads',
             )
 
             # Create page with realistic context
@@ -422,8 +457,25 @@ class MercariAutomationAdapter:
                 );
             """)
 
-            # Login
-            self._login()
+            # Load cookies if available, otherwise login
+            if self.cookies_file and os.path.exists(self.cookies_file):
+                print(f"🍪 Loading saved cookies from {self.cookies_file}")
+                self._load_cookies()
+                # Navigate to homepage to verify cookies work
+                self.page.goto("https://www.mercari.com/", wait_until="networkidle", timeout=60000)
+                self._human_delay(1000, 2000)
+
+                # Check if we're logged in by looking for user-specific elements
+                if self.page.url != "https://www.mercari.com/":
+                    print("⚠️  Cookies expired or invalid, falling back to login...")
+                    self._login()
+                    self._save_cookies()
+                else:
+                    print("✅ Logged in successfully using cookies!")
+            else:
+                print("🔐 No cookies found, performing login...")
+                self._login()
+                self._save_cookies()
 
             # Navigate to sell page (with human delay)
             self.page.goto("https://www.mercari.com/sell/")
@@ -488,9 +540,11 @@ class MercariAutomationAdapter:
             - MERCARI_EMAIL
             - MERCARI_PASSWORD
             - MERCARI_HEADLESS (optional: "false" to see browser, default "true")
+            - MERCARI_COOKIES_FILE (optional: path to cookies file)
         """
         email = os.getenv("MERCARI_EMAIL")
         password = os.getenv("MERCARI_PASSWORD")
+        cookies_file = os.getenv("MERCARI_COOKIES_FILE", "data/mercari_cookies.json")
 
         # Check if headless mode should be disabled (for debugging)
         headless_env = os.getenv("MERCARI_HEADLESS", "true").lower()
@@ -504,7 +558,7 @@ class MercariAutomationAdapter:
                 "Required: MERCARI_EMAIL, MERCARI_PASSWORD"
             )
 
-        return cls(email, password, headless)
+        return cls(email, password, headless, cookies_file)
 
 
 class MercariAdapter:
