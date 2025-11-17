@@ -28,15 +28,14 @@ def save_mercari_cookies():
     input()
 
     with sync_playwright() as p:
-        # Launch visible browser
-        browser = p.chromium.launch(
+        # Launch visible Firefox browser (better for avoiding detection)
+        print("🦊 Launching Firefox browser...")
+        browser = p.firefox.launch(
             headless=False,  # Always visible
-            args=['--disable-blink-features=AutomationControlled']
         )
 
         # Create context with realistic settings
         context = browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             viewport={'width': 1920, 'height': 1080},
             locale='en-US',
             timezone_id='America/New_York',
@@ -97,6 +96,7 @@ def save_mercari_cookies():
         browser.close()
 
         print("\n✅ Done! You can now use the GUI to post to Mercari.")
+        print("\n💡 Tip: Firefox cookies work great and avoid bot detection!")
 
 if __name__ == "__main__":
     try:
@@ -105,6 +105,6 @@ if __name__ == "__main__":
         print("\n\n❌ Cancelled by user")
     except Exception as e:
         print(f"\n\n❌ Error: {e}")
-        print("\nMake sure you have Playwright installed:")
+        print("\nMake sure you have Playwright and Firefox installed:")
         print("  pip install playwright")
-        print("  playwright install chromium")
+        print("  playwright install firefox")
