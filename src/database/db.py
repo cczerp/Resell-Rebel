@@ -186,15 +186,17 @@ class Database:
             ON notifications(is_read)
         """)
 
+        self.conn.commit()
+
+        # Run migrations for existing databases (must run before user_id index)
+        self._run_migrations()
+
+        # Create user_id index after migration (in case column didn't exist)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_listings_user_id
             ON listings(user_id)
         """)
-
         self.conn.commit()
-
-        # Run migrations for existing databases
-        self._run_migrations()
 
     def _run_migrations(self):
         """Run database migrations for existing databases"""
