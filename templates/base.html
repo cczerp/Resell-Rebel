@@ -155,6 +155,7 @@
     </div>
 
     <!-- Bottom Navigation -->
+    {% if current_user.is_authenticated %}
     <nav class="bottom-nav">
         <div class="d-flex">
             <div class="nav-item">
@@ -195,6 +196,31 @@
             </div>
         </div>
     </nav>
+    {% else %}
+    <!-- Guest Navigation -->
+    <nav class="bottom-nav">
+        <div class="d-flex">
+            <div class="nav-item">
+                <a href="{{ url_for('index') }}" class="nav-link active">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="{{ url_for('register') }}" class="nav-link">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Sign Up</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="{{ url_for('login') }}" class="nav-link">
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span>Login</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

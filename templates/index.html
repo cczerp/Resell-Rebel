@@ -1,10 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}Home - AI Cross-Poster{% endblock %}
+{% block title %}Home - SellRage{% endblock %}
 
 {% block content %}
+
+{% if is_guest %}
+<!-- Guest Landing Page -->
+<div class="text-center py-5">
+    <h1 class="display-3">🚀 SellRage</h1>
+    <p class="lead">Multi-Platform Inventory & Listing Management</p>
+    <p class="text-muted">Sell smarter. Track everything. Never lose an item.</p>
+
+    <div class="mt-4">
+        <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg me-2">
+            <i class="fas fa-user-plus"></i> Get Started Free
+        </a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg">
+            <i class="fas fa-sign-in-alt"></i> Sign In
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mt-3">
+    <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-camera fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Photo to Listing</h5>
+                <p class="card-text">Take a photo, AI creates the listing with title, description, price suggestions</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-map-marker-alt fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Smart Storage</h5>
+                <p class="card-text">Track where every item is stored. Never search for items after a sale!</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-globe fa-3x text-success mb-3"></i>
+                <h5 class="card-title">27+ Platforms</h5>
+                <p class="card-text">Manage listings for Etsy, Poshmark, eBay, Facebook, and 23 more platforms</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- Logged-in User Dashboard -->
 <div class="text-center py-4">
-    <h1 class="display-4">🚀 AI Lister</h1>
+    <h1 class="display-4">🚀 SellRage</h1>
     <p class="lead">Create listings with AI and track your inventory</p>
     <p class="text-muted">Welcome back, <strong>{{ current_user.username }}</strong>!</p>
 </div>
@@ -43,6 +93,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <div class="card mt-3">
     <div class="card-body">
