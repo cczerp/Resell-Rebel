@@ -32,6 +32,18 @@ class Database:
         """Create all database tables"""
         cursor = self.conn.cursor()
 
+        # Users table - for authentication
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP
+            )
+        """)
+
         # Collectibles database table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS collectibles (
@@ -62,6 +74,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS listings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 listing_uuid TEXT UNIQUE NOT NULL,  -- Internal unique ID
+                user_id INTEGER NOT NULL,  -- FK to users (owner of listing)
                 collectible_id INTEGER,  -- FK to collectibles
                 title TEXT NOT NULL,
                 description TEXT,
@@ -79,7 +92,8 @@ class Database:
                 sold_price REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (collectible_id) REFERENCES collectibles(id)
+                FOREIGN KEY (collectible_id) REFERENCES collectibles(id),
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
 
@@ -172,6 +186,11 @@ class Database:
             ON notifications(is_read)
         """)
 
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_listings_user_id
+            ON listings(user_id)
+        """)
+
         self.conn.commit()
 
         # Run migrations for existing databases
@@ -206,6 +225,31 @@ class Database:
             print("Running migration: Adding cancel_scheduled_at column to platform_listings table")
             cursor.execute("ALTER TABLE platform_listings ADD COLUMN cancel_scheduled_at TIMESTAMP")
             self.conn.commit()
+
+        # Migration: Add user_id to listings table
+        try:
+            cursor.execute("SELECT user_id FROM listings LIMIT 1")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            print("Running migration: Adding user_id column to listings table")
+            # Add column with default value 1 (for existing listings, assume first user)
+            cursor.execute("ALTER TABLE listings ADD COLUMN user_id INTEGER DEFAULT 1")
+            self.conn.commit()
+            # Create a default admin user if no users exist
+            cursor.execute("SELECT COUNT(*) FROM users")
+            if cursor.fetchone()[0] == 0:
+                print("Creating default user for existing listings")
+                # Create default user with a secure random password (user should change this)
+                import secrets
+                default_password = secrets.token_urlsafe(16)
+                from werkzeug.security import generate_password_hash
+                cursor.execute("""
+                    INSERT INTO users (id, username, email, password_hash)
+                    VALUES (1, 'admin', 'admin@localhost', ?)
+                """, (generate_password_hash(default_password),))
+                self.conn.commit()
+                print(f"Default user created: username='admin', password='{default_password}'")
+                print("IMPORTANT: Please change this password after first login!")
 
     # ========================================================================
     # COLLECTIBLES METHODS
@@ -341,6 +385,7 @@ class Database:
         price: float,
         condition: str,
         photos: List[str],
+        user_id: int,
         collectible_id: Optional[int] = None,
         cost: Optional[float] = None,
         category: Optional[str] = None,
@@ -353,11 +398,11 @@ class Database:
 
         cursor.execute("""
             INSERT INTO listings (
-                listing_uuid, collectible_id, title, description, price,
+                listing_uuid, user_id, collectible_id, title, description, price,
                 cost, condition, category, attributes, photos, quantity, storage_location, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
         """, (
-            listing_uuid, collectible_id, title, description, price,
+            listing_uuid, user_id, collectible_id, title, description, price,
             cost, condition, category,
             json.dumps(attributes) if attributes else None,
             json.dumps(photos),
@@ -382,15 +427,23 @@ class Database:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-    def get_drafts(self, limit: int = 100) -> List[Dict]:
-        """Get all draft listings"""
+    def get_drafts(self, limit: int = 100, user_id: Optional[int] = None) -> List[Dict]:
+        """Get all draft listings, optionally filtered by user"""
         cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT * FROM listings
-            WHERE status = 'draft'
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (limit,))
+        if user_id is not None:
+            cursor.execute("""
+                SELECT * FROM listings
+                WHERE status = 'draft' AND user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (user_id, limit))
+        else:
+            cursor.execute("""
+                SELECT * FROM listings
+                WHERE status = 'draft'
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (limit,))
         return [dict(row) for row in cursor.fetchall()]
 
     def update_listing_status(self, listing_id: int, status: str):
@@ -615,6 +668,51 @@ class Database:
             WHERE pa.is_active = 1
         """)
         return [dict(row) for row in cursor.fetchall()]
+
+    # ========================================================================
+    # USER AUTHENTICATION METHODS
+    # ========================================================================
+
+    def create_user(self, username: str, email: str, password_hash: str) -> int:
+        """Create a new user"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, email, password_hash)
+            VALUES (?, ?, ?)
+        """, (username, email, password_hash))
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_user_by_username(self, username: str) -> Optional[Dict]:
+        """Get user by username"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_user_by_email(self, email: str) -> Optional[Dict]:
+        """Get user by email"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_user_by_id(self, user_id: int) -> Optional[Dict]:
+        """Get user by ID"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def update_last_login(self, user_id: int):
+        """Update user's last login timestamp"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE users
+            SET last_login = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (user_id,))
+        self.conn.commit()
 
     def close(self):
         """Close database connection"""
