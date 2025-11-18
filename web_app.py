@@ -211,26 +211,33 @@ def register():
             flash(error_msg, 'error')
             return render_template('register.html')
 
-        # Create user
-        password_hash = generate_password_hash(password)
-        user_id = db.create_user(username, email, password_hash)
+        try:
+            # Create user
+            password_hash = generate_password_hash(password)
+            user_id = db.create_user(username, email, password_hash)
 
-        # Log activity
-        db.log_activity(
-            action='register',
-            user_id=user_id,
-            ip_address=request.remote_addr,
-            user_agent=request.headers.get('User-Agent')
-        )
+            # Log activity
+            db.log_activity(
+                action='register',
+                user_id=user_id,
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent')
+            )
 
-        # Auto-login
-        user = User(user_id, username, email, is_admin=False, is_active=True)
-        login_user(user, remember=True)
+            # Auto-login
+            user = User(user_id, username, email, is_admin=False, is_active=True)
+            login_user(user, remember=True)
 
-        if request.is_json:
-            return jsonify({'success': True, 'redirect': url_for('index')})
-        flash('Account created successfully!', 'success')
-        return redirect(url_for('index'))
+            if request.is_json:
+                return jsonify({'success': True, 'redirect': url_for('index')})
+            flash('Account created successfully!', 'success')
+            return redirect(url_for('index'))
+        except Exception as e:
+            error_msg = f'Registration failed: {str(e)}'
+            if request.is_json:
+                return jsonify({'error': error_msg}), 500
+            flash(error_msg, 'error')
+            return render_template('register.html')
 
     return render_template('register.html')
 
@@ -318,10 +325,12 @@ def reset_password(token):
 # ============================================================================
 
 @app.route('/')
-@login_required
 def index():
-    """Home page"""
-    return render_template('index.html')
+    """Home page - accessible to guests"""
+    # Show guest landing page if not logged in
+    if not current_user.is_authenticated:
+        return render_template('index.html', is_guest=True)
+    return render_template('index.html', is_guest=False)
 
 
 @app.route('/create')
