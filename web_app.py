@@ -334,10 +334,10 @@ def index():
 
 
 @app.route('/create')
-@login_required
 def create_listing():
-    """Create new listing page"""
-    return render_template('create.html')
+    """Create new listing page - accessible to guests for AI demo"""
+    is_guest = not current_user.is_authenticated
+    return render_template('create.html', is_guest=is_guest)
 
 
 @app.route('/drafts')
@@ -569,9 +569,8 @@ def admin_delete_user(user_id):
 # ============================================================================
 
 @app.route('/api/upload-photos', methods=['POST'])
-@login_required
 def upload_photos():
-    """Handle photo uploads"""
+    """Handle photo uploads - accessible to guests"""
     if 'photos' not in request.files:
         return jsonify({'error': 'No photos provided'}), 400
 
@@ -599,9 +598,8 @@ def upload_photos():
 
 
 @app.route('/api/analyze', methods=['POST'])
-@login_required
 def analyze_photos():
-    """Analyze photos with AI"""
+    """Analyze photos with AI - accessible to guests"""
     photo_paths = session.get('photo_paths', [])
 
     if not photo_paths:
