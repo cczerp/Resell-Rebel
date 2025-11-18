@@ -235,6 +235,19 @@ def notifications():
     return render_template('notifications.html', notifications=notifs)
 
 
+@app.route('/settings')
+@login_required
+def settings():
+    """User settings page"""
+    user = db.get_user_by_id(current_user.id)
+    marketplace_creds = db.get_all_marketplace_credentials(current_user.id)
+
+    # Convert to dict for easier template access
+    creds_dict = {cred['platform']: cred for cred in marketplace_creds}
+
+    return render_template('settings.html', user=user, credentials=creds_dict)
+
+
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
@@ -537,6 +550,66 @@ def delete_draft(listing_id):
 
         db.delete_listing(listing_id)
 
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/notification-email', methods=['POST'])
+@login_required
+def update_notification_email():
+    """Update user's notification email"""
+    try:
+        data = request.json
+        notification_email = data.get('notification_email')
+
+        if not notification_email:
+            return jsonify({'error': 'Notification email is required'}), 400
+
+        db.update_notification_email(current_user.id, notification_email)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/marketplace-credentials', methods=['POST'])
+@login_required
+def save_marketplace_credentials():
+    """Save marketplace credentials"""
+    try:
+        data = request.json
+        platform = data.get('platform')
+        username = data.get('username')
+        password = data.get('password')
+
+        if not platform:
+            return jsonify({'error': 'Platform is required'}), 400
+
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+
+        # Validate platform
+        valid_platforms = ['poshmark', 'depop', 'varagesale', 'mercari', 'ebay', 'facebook', 'nextdoor']
+        if platform.lower() not in valid_platforms:
+            return jsonify({'error': 'Invalid platform'}), 400
+
+        db.save_marketplace_credentials(current_user.id, platform.lower(), username, password)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/marketplace-credentials/<platform>', methods=['DELETE'])
+@login_required
+def delete_marketplace_credentials(platform):
+    """Delete marketplace credentials"""
+    try:
+        db.delete_marketplace_credentials(current_user.id, platform.lower())
         return jsonify({'success': True})
 
     except Exception as e:

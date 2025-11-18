@@ -39,8 +39,24 @@ class Database:
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                notification_email TEXT,  -- Where to send sale notifications
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP
+            )
+        """)
+
+        # Marketplace credentials - per user
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS marketplace_credentials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                platform TEXT NOT NULL,  -- 'poshmark', 'depop', 'varagesale', etc.
+                username TEXT,
+                password TEXT,  -- Encrypted or use secure storage in production
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                UNIQUE(user_id, platform)
             )
         """)
 
@@ -252,6 +268,15 @@ class Database:
                 self.conn.commit()
                 print(f"Default user created: username='admin', password='{default_password}'")
                 print("IMPORTANT: Please change this password after first login!")
+
+        # Migration: Add notification_email to users table
+        try:
+            cursor.execute("SELECT notification_email FROM users LIMIT 1")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            print("Running migration: Adding notification_email column to users table")
+            cursor.execute("ALTER TABLE users ADD COLUMN notification_email TEXT")
+            self.conn.commit()
 
     # ========================================================================
     # COLLECTIBLES METHODS
@@ -714,6 +739,59 @@ class Database:
             SET last_login = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (user_id,))
+        self.conn.commit()
+
+    def update_notification_email(self, user_id: int, notification_email: str):
+        """Update user's notification email"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE users
+            SET notification_email = ?
+            WHERE id = ?
+        """, (notification_email, user_id))
+        self.conn.commit()
+
+    # ========================================================================
+    # MARKETPLACE CREDENTIALS METHODS
+    # ========================================================================
+
+    def save_marketplace_credentials(self, user_id: int, platform: str, username: str, password: str):
+        """Save or update marketplace credentials for a user"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO marketplace_credentials
+            (user_id, platform, username, password, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (user_id, platform, username, password))
+        self.conn.commit()
+
+    def get_marketplace_credentials(self, user_id: int, platform: str) -> Optional[Dict]:
+        """Get marketplace credentials for a specific platform"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM marketplace_credentials
+            WHERE user_id = ? AND platform = ?
+        """, (user_id, platform))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_all_marketplace_credentials(self, user_id: int) -> List[Dict]:
+        """Get all marketplace credentials for a user"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM marketplace_credentials
+            WHERE user_id = ?
+            ORDER BY platform
+        """, (user_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def delete_marketplace_credentials(self, user_id: int, platform: str):
+        """Delete marketplace credentials for a platform"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            DELETE FROM marketplace_credentials
+            WHERE user_id = ? AND platform = ?
+        """, (user_id, platform))
         self.conn.commit()
 
     def close(self):
