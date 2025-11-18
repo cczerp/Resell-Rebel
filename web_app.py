@@ -24,9 +24,9 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
 from src.schema import UnifiedListing, Photo, Price, ListingCondition, Shipping, ItemSpecifics
-from src.sync import MultiPlatformSyncManager
 from src.database import get_db
-from src.notifications import NotificationManager
+import csv
+from io import StringIO, BytesIO
 
 # Load environment
 load_dotenv()
@@ -42,14 +42,6 @@ Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
 
 # Initialize services
 db = get_db()
-sync_manager = None
-notification_manager = None
-
-try:
-    sync_manager = MultiPlatformSyncManager.from_env()
-    notification_manager = NotificationManager.from_env()
-except Exception as e:
-    print(f"Warning: Service initialization issue: {e}")
 
 
 # ============================================================================
@@ -226,61 +218,94 @@ def save_draft():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/post-listing', methods=['POST'])
-def post_listing():
-    """Post listing to platforms"""
-    data = request.json
-    photo_paths = session.get('photo_paths', [])
+@app.route('/api/export-csv', methods=['GET'])
+def export_csv():
+    """Export all drafts to CSV"""
+    try:
+        drafts = db.get_drafts(limit=1000)
 
-    if not photo_paths:
-        return jsonify({'error': 'No photos uploaded'}), 400
+        # Create CSV in memory
+        output = StringIO()
+        writer = csv.writer(output)
 
-    if not sync_manager:
-        return jsonify({'error': 'Sync manager not initialized'}), 500
+        # Header
+        writer.writerow(['ID', 'Title', 'Description', 'Price', 'Cost', 'Condition',
+                        'Brand', 'Size', 'Color', 'Storage Location', 'Quantity',
+                        'Shipping Cost', 'Created'])
+
+        # Data
+        for draft in drafts:
+            # Parse attributes
+            attrs = {}
+            if draft.get('attributes'):
+                try:
+                    attrs = json.loads(draft['attributes'])
+                except:
+                    pass
+
+            writer.writerow([
+                draft['id'],
+                draft['title'],
+                draft['description'],
+                draft['price'],
+                draft.get('cost', ''),
+                draft['condition'],
+                attrs.get('brand', ''),
+                attrs.get('size', ''),
+                attrs.get('color', ''),
+                draft.get('storage_location', ''),
+                draft.get('quantity', 1),
+                attrs.get('shipping_cost', ''),
+                draft['created_at']
+            ])
+
+        # Send file
+        from flask import Response
+        output.seek(0)
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=listings.csv'}
+        )
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/import-csv', methods=['POST'])
+def import_csv():
+    """Import CSV to update storage locations"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
 
     try:
-        # Create photo objects
-        photo_objects = [
-            Photo(url="", local_path=p, order=i, is_primary=(i == 0))
-            for i, p in enumerate(photo_paths)
-        ]
+        # Read CSV
+        stream = StringIO(file.stream.read().decode('utf-8'))
+        reader = csv.DictReader(stream)
 
-        # Create listing
-        listing = UnifiedListing(
-            title=data.get('title', 'Untitled'),
-            description=data.get('description', ''),
-            price=Price(amount=float(data.get('price', 0))),
-            condition=ListingCondition(data.get('condition', 'good')),
-            photos=photo_objects,
-            item_specifics=ItemSpecifics(
-                brand=data.get('brand'),
-                size=data.get('size'),
-                color=data.get('color'),
-            ),
-            shipping=Shipping(
-                cost=float(data.get('shipping_cost', 0))
-            ),
-            quantity=int(data.get('quantity', 1)),
-            location=data.get('storage_location'),
-        )
+        updated = 0
+        for row in reader:
+            listing_id = row.get('ID')
+            storage_location = row.get('Storage Location')
 
-        # Get selected platforms
-        platforms = data.get('platforms', ['ebay', 'mercari'])
-
-        # Post to platforms
-        result = sync_manager.post_to_all_platforms(
-            listing,
-            platforms=platforms,
-            cost=float(data.get('cost')) if data.get('cost') else None,
-        )
-
-        # Clear session
-        session.pop('photo_paths', None)
+            if listing_id and storage_location:
+                # Update storage location
+                cursor = db.conn.cursor()
+                cursor.execute("""
+                    UPDATE listings
+                    SET storage_location = ?
+                    WHERE id = ?
+                """, (storage_location, listing_id))
+                db.conn.commit()
+                updated += 1
 
         return jsonify({
             'success': True,
-            'listing_id': result['listing_id'],
-            'results': {k: {'success': v.success, 'error': v.error} for k, v in result['results'].items()}
+            'updated': updated
         })
 
     except Exception as e:
@@ -292,20 +317,45 @@ def mark_sold():
     """Mark listing as sold"""
     data = request.json
 
-    if not sync_manager:
-        return jsonify({'error': 'Sync manager not initialized'}), 500
-
     try:
-        result = sync_manager.mark_sold(
-            listing_id=int(data['listing_id']),
-            sold_platform=data['platform'],
-            sold_price=float(data.get('sold_price')) if data.get('sold_price') else None,
-            quantity_sold=int(data.get('quantity_sold', 1)),
-        )
+        listing_id = int(data['listing_id'])
+        sold_price = float(data.get('sold_price')) if data.get('sold_price') else None
+        quantity_sold = int(data.get('quantity_sold', 1))
+
+        # Get listing
+        listing = db.get_listing(listing_id)
+        if not listing:
+            return jsonify({'error': 'Listing not found'}), 404
+
+        # Update quantity
+        current_quantity = listing.get('quantity', 1)
+        remaining_quantity = max(0, current_quantity - quantity_sold)
+
+        cursor = db.conn.cursor()
+        if remaining_quantity == 0:
+            # Mark as sold
+            cursor.execute("""
+                UPDATE listings
+                SET status = 'sold',
+                    quantity = 0,
+                    sold_price = ?,
+                    sold_date = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (sold_price, listing_id))
+        else:
+            # Just reduce quantity
+            cursor.execute("""
+                UPDATE listings
+                SET quantity = ?
+                WHERE id = ?
+            """, (remaining_quantity, listing_id))
+
+        db.conn.commit()
 
         return jsonify({
             'success': True,
-            'result': result
+            'storage_location': listing.get('storage_location'),
+            'remaining_quantity': remaining_quantity
         })
 
     except Exception as e:

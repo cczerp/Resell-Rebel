@@ -66,10 +66,8 @@
 {% block extra_js %}
 <script>
 async function markSold(id) {
-    const platform = prompt('Which platform did it sell on? (ebay/mercari)');
-    if (!platform) return;
-
     const soldPrice = prompt('Sold price? (leave blank for listed price)');
+    if (soldPrice === null) return; // User canceled
 
     showLoading();
 
@@ -79,7 +77,6 @@ async function markSold(id) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 listing_id: id,
-                platform: platform,
                 sold_price: soldPrice || null,
                 quantity_sold: 1
             })
@@ -87,8 +84,8 @@ async function markSold(id) {
 
         const data = await response.json();
 
-        if (data.success && data.result.storage_location) {
-            showAlert(`Item sold! Go to location: ${data.result.storage_location}`, 'success');
+        if (data.success && data.storage_location) {
+            showAlert(`Item sold! Go to location: ${data.storage_location}`, 'success');
             setTimeout(() => location.reload(), 2000);
         } else if (data.success) {
             showAlert('Item marked as sold!', 'success');

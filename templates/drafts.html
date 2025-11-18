@@ -3,7 +3,25 @@
 {% block title %}Drafts{% endblock %}
 
 {% block content %}
-<h2 class="mb-4"><i class="fas fa-folder"></i> Saved Drafts</h2>
+<h2 class="mb-4"><i class="fas fa-folder"></i> Saved Listings</h2>
+
+<!-- CSV Import/Export -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="d-grid gap-2">
+            <a href="/api/export-csv" class="btn btn-success">
+                <i class="fas fa-download"></i> Export to CSV
+            </a>
+            <button class="btn btn-primary" onclick="document.getElementById('csvFile').click()">
+                <i class="fas fa-upload"></i> Import CSV (Update Storage Locations)
+            </button>
+            <input type="file" id="csvFile" accept=".csv" style="display:none;" onchange="importCSV(this)">
+        </div>
+        <small class="text-muted d-block mt-2">
+            Export listings to CSV, edit storage locations in Excel/Sheets, then import to update
+        </small>
+    </div>
+</div>
 
 {% if drafts %}
     {% for draft in drafts %}
@@ -57,7 +75,7 @@
 {% block extra_js %}
 <script>
 async function deleteDraft(id) {
-    if (!confirm('Delete this draft?')) return;
+    if (!confirm('Delete this listing?')) return;
 
     showLoading();
 
@@ -69,7 +87,7 @@ async function deleteDraft(id) {
         const data = await response.json();
 
         if (data.success) {
-            showAlert('Draft deleted', 'success');
+            showAlert('Listing deleted', 'success');
             location.reload();
         } else {
             showAlert(data.error, 'danger');
@@ -78,6 +96,37 @@ async function deleteDraft(id) {
         showAlert('Delete failed: ' + error, 'danger');
     } finally {
         hideLoading();
+    }
+}
+
+async function importCSV(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    showLoading();
+
+    try {
+        const response = await fetch('/api/import-csv', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showAlert(`Updated ${data.updated} storage locations!`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showAlert(data.error, 'danger');
+        }
+    } catch (error) {
+        showAlert('Import failed: ' + error, 'danger');
+    } finally {
+        hideLoading();
+        input.value = ''; // Reset file input
     }
 }
 </script>

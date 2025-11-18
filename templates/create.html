@@ -105,35 +105,14 @@
         </div>
     </div>
 
-    <!-- Platforms -->
-    <div class="card mb-3">
-        <div class="card-header">
-            <i class="fas fa-share-alt"></i> Platforms
-        </div>
-        <div class="card-body">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="ebay" name="platforms" value="ebay" checked>
-                <label class="form-check-label" for="ebay">
-                    <i class="fab fa-ebay"></i> eBay
-                </label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="mercari" name="platforms" value="mercari" checked>
-                <label class="form-check-label" for="mercari">
-                    Mercari
-                </label>
-            </div>
-        </div>
-    </div>
-
     <!-- Actions -->
     <div class="d-grid gap-2">
-        <button type="button" class="btn btn-outline-secondary btn-lg" id="saveDraftBtn">
-            <i class="fas fa-save"></i> Save as Draft
+        <button type="button" class="btn btn-primary btn-lg" id="saveDraftBtn">
+            <i class="fas fa-save"></i> Save Listing
         </button>
-        <button type="button" class="btn btn-primary btn-lg" id="postBtn">
-            <i class="fas fa-rocket"></i> Post Now
-        </button>
+        <small class="text-muted text-center mt-2">
+            Listing will be saved. You can manually post to any platform you want!
+        </small>
     </div>
 </form>
 {% endblock %}
@@ -225,7 +204,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
     }
 });
 
-// Save Draft
+// Save Listing
 document.getElementById('saveDraftBtn').addEventListener('click', async function() {
     if (uploadedPhotos.length === 0) {
         showAlert('Please upload photos first!', 'warning');
@@ -245,7 +224,7 @@ document.getElementById('saveDraftBtn').addEventListener('click', async function
         const data = await response.json();
 
         if (data.success) {
-            showAlert('Draft saved successfully!', 'success');
+            showAlert('Listing saved successfully!', 'success');
             setTimeout(() => window.location.href = '/drafts', 1500);
         } else {
             showAlert(data.error, 'danger');
@@ -257,44 +236,7 @@ document.getElementById('saveDraftBtn').addEventListener('click', async function
     }
 });
 
-// Post Listing
-document.getElementById('postBtn').addEventListener('click', async function() {
-    if (uploadedPhotos.length === 0) {
-        showAlert('Please upload photos first!', 'warning');
-        return;
-    }
-
-    if (!confirm('Post this listing now?')) return;
-
-    const formData = collectFormData();
-    showLoading();
-
-    try {
-        const response = await fetch('/api/post-listing', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(formData)
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showAlert('Listing posted successfully!', 'success');
-            setTimeout(() => window.location.href = '/listings', 1500);
-        } else {
-            showAlert(data.error, 'danger');
-        }
-    } catch (error) {
-        showAlert('Post failed: ' + error, 'danger');
-    } finally {
-        hideLoading();
-    }
-});
-
 function collectFormData() {
-    const platforms = Array.from(document.querySelectorAll('input[name="platforms"]:checked'))
-        .map(cb => cb.value);
-
     return {
         title: document.getElementById('title').value,
         description: document.getElementById('description').value,
@@ -306,8 +248,7 @@ function collectFormData() {
         color: document.getElementById('color').value,
         shipping_cost: document.getElementById('shipping_cost').value,
         storage_location: document.getElementById('storage_location').value,
-        quantity: document.getElementById('quantity').value,
-        platforms: platforms
+        quantity: document.getElementById('quantity').value
     };
 }
 </script>
