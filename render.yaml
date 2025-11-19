@@ -5,8 +5,8 @@ services:
     region: oregon
     plan: free
     branch: claude/fix-draft-images-01QE3wmE4voZh8EkkvKAsvyP
-    buildCommand: pip install -r requirements.txt
-    startCommand: bash start.sh
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: FLASK_SECRET_KEY
         generateValue: true
