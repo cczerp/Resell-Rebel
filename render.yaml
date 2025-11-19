@@ -6,7 +6,7 @@ services:
     plan: free
     branch: claude/fix-draft-images-01QE3wmE4voZh8EkkvKAsvyP
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m gunicorn web_app:app --bind 0.0.0.0:$PORT
+    startCommand: ./start.sh
     envVars:
       - key: FLASK_SECRET_KEY
         generateValue: true
