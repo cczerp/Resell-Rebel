@@ -1434,24 +1434,96 @@ def bulk_post():
             platform_config = PLATFORM_CONFIG.get(platform, {})
 
             # Check if user has credentials for this platform
-            # For now, we'll mark as "credentials_required"
-            # In production, you'd check database for stored credentials
+            creds_data = db.get_marketplace_credentials(current_user.id, f"api_{platform}")
 
-            for listing in listings:
-                results['api_results'].append({
-                    'listing_id': listing['id'],
-                    'platform': platform,
-                    'status': 'credentials_required',
-                    'message': f'Please configure {platform_config["name"]} API credentials in Settings to enable automated posting.',
-                    'platform_name': platform_config['name']
-                })
+            if not creds_data or not creds_data.get('password'):
+                # No credentials configured
+                for listing in listings:
+                    results['api_results'].append({
+                        'listing_id': listing['id'],
+                        'platform': platform,
+                        'status': 'credentials_required',
+                        'message': f'Please configure {platform_config["name"]} API credentials in Settings to enable automated posting.',
+                        'platform_name': platform_config['name']
+                    })
 
-                # Update status to show credentials needed
-                current_statuses = listing.get('platform_statuses', '') or ''
-                status_list = [s for s in current_statuses.split(',') if s and s.strip()]
-                status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
-                status_list.append(f"{platform}:needs_credentials")
-                db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
+                    # Update status to show credentials needed
+                    current_statuses = listing.get('platform_statuses', '') or ''
+                    status_list = [s for s in current_statuses.split(',') if s and s.strip()]
+                    status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
+                    status_list.append(f"{platform}:needs_credentials")
+                    db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
+            else:
+                # Credentials are configured - attempt API posting
+                try:
+                    credentials = json.loads(creds_data['password'])
+
+                    # Initialize appropriate adapter
+                    adapter = None
+                    if platform == 'etsy':
+                        adapter = EtsyAdapter(
+                            api_key=credentials.get('api_key'),
+                            shop_id=credentials.get('shop_id')
+                        )
+                    elif platform == 'shopify':
+                        adapter = ShopifyAdapter(
+                            store_url=credentials.get('store_url'),
+                            access_token=credentials.get('access_token')
+                        )
+                    elif platform == 'woocommerce':
+                        adapter = WooCommerceAdapter(
+                            store_url=credentials.get('store_url'),
+                            consumer_key=credentials.get('consumer_key'),
+                            consumer_secret=credentials.get('consumer_secret')
+                        )
+                    elif platform == 'facebook':
+                        adapter = FacebookShopsAdapter(
+                            access_token=credentials.get('access_token'),
+                            catalog_id=credentials.get('catalog_id')
+                        )
+
+                    if adapter:
+                        # Post each listing
+                        for listing in listings:
+                            unified_listing = convert_listing_to_unified(listing)
+                            post_result = adapter.publish_listing(unified_listing)
+
+                            if post_result.get('success'):
+                                results['api_results'].append({
+                                    'listing_id': listing['id'],
+                                    'platform': platform,
+                                    'status': 'posted',
+                                    'message': f'Successfully posted to {platform_config["name"]}!',
+                                    'platform_name': platform_config['name'],
+                                    'listing_url': post_result.get('listing_url')
+                                })
+
+                                # Update status
+                                current_statuses = listing.get('platform_statuses', '') or ''
+                                status_list = [s for s in current_statuses.split(',') if s and s.strip()]
+                                status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
+                                status_list.append(f"{platform}:posted")
+                                db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
+                            else:
+                                results['api_results'].append({
+                                    'listing_id': listing['id'],
+                                    'platform': platform,
+                                    'status': 'failed',
+                                    'message': f'Failed to post to {platform_config["name"]}: {post_result.get("error")}',
+                                    'platform_name': platform_config['name']
+                                })
+                                results['success'] = False
+
+                except Exception as e:
+                    for listing in listings:
+                        results['api_results'].append({
+                            'listing_id': listing['id'],
+                            'platform': platform,
+                            'status': 'error',
+                            'message': f'Error posting to {platform_config["name"]}: {str(e)}',
+                            'platform_name': platform_config['name']
+                        })
+                    results['success'] = False
 
         return jsonify(results)
 
@@ -1766,6 +1838,64 @@ def delete_marketplace_credentials(platform):
     try:
         db.delete_marketplace_credentials(current_user.id, platform.lower())
         return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/api-credentials', methods=['POST'])
+@login_required
+def save_api_credentials():
+    """Save API credentials for automated platforms"""
+    try:
+        data = request.json
+        platform = data.get('platform')
+        credentials = data.get('credentials')
+
+        if not platform:
+            return jsonify({'error': 'Platform is required'}), 400
+
+        if not credentials:
+            return jsonify({'error': 'Credentials are required'}), 400
+
+        # Validate platform
+        valid_api_platforms = ['etsy', 'shopify', 'woocommerce', 'facebook']
+        if platform.lower() not in valid_api_platforms:
+            return jsonify({'error': 'Invalid API platform'}), 400
+
+        # Store API credentials as JSON in database
+        # For now, we'll use the marketplace_credentials table but with a special format
+        # In production, you'd want a separate api_credentials table
+        credentials_json = json.dumps(credentials)
+        db.save_marketplace_credentials(current_user.id, f"api_{platform.lower()}", "api_token", credentials_json)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/api-credentials/<platform>', methods=['GET'])
+@login_required
+def get_api_credentials(platform):
+    """Get API credentials for a platform"""
+    try:
+        # Get stored credentials
+        creds = db.get_marketplace_credentials(current_user.id, f"api_{platform.lower()}")
+
+        if creds and creds.get('password'):
+            # Password field contains the JSON credentials
+            credentials = json.loads(creds['password'])
+            return jsonify({
+                'success': True,
+                'credentials': credentials,
+                'configured': True
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'configured': False
+            })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

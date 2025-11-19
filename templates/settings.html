@@ -47,12 +47,133 @@
     </div>
 </div>
 
-<!-- Marketplace Credentials -->
+<!-- API Platform Credentials (Automated Posting) -->
 <div class="card mb-3">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="fas fa-robot"></i> API Platforms (Fully Automated Posting)</h5>
+    </div>
     <div class="card-body">
-        <h5 class="card-title"><i class="fas fa-store"></i> Marketplace Connections</h5>
+        <p class="text-muted">
+            Configure API credentials for fully automated posting - no manual CSV uploads needed!
+            <strong>Your credentials are stored securely and never shared.</strong>
+        </p>
+
+        <!-- Etsy API -->
+        <div class="border rounded p-3 mb-3">
+            <h6 class="d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-store text-warning"></i> Etsy API</span>
+                <span class="badge bg-secondary">Not Configured</span>
+            </h6>
+            <p class="small text-muted">
+                Get your API key from: <a href="https://www.etsy.com/developers" target="_blank">Etsy Developer Portal</a>
+            </p>
+            <form class="api-credentials-form" data-platform="etsy">
+                <div class="mb-2">
+                    <label class="form-label small">API Key</label>
+                    <input type="text" class="form-control form-control-sm" name="api_key" placeholder="Your Etsy API Key">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Shop ID</label>
+                    <input type="text" class="form-control form-control-sm" name="shop_id" placeholder="Your Etsy Shop ID">
+                </div>
+                <button type="submit" class="btn btn-sm btn-success">
+                    <i class="fas fa-save"></i> Save Etsy API
+                </button>
+            </form>
+        </div>
+
+        <!-- Shopify API -->
+        <div class="border rounded p-3 mb-3">
+            <h6 class="d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-shopping-cart text-success"></i> Shopify API</span>
+                <span class="badge bg-secondary">Not Configured</span>
+            </h6>
+            <p class="small text-muted">
+                Get your API key from: Shopify Admin → Apps → Develop Apps
+            </p>
+            <form class="api-credentials-form" data-platform="shopify">
+                <div class="mb-2">
+                    <label class="form-label small">Store URL</label>
+                    <input type="text" class="form-control form-control-sm" name="store_url" placeholder="yourstore.myshopify.com">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Access Token</label>
+                    <input type="password" class="form-control form-control-sm" name="access_token" placeholder="Your Shopify Access Token">
+                </div>
+                <button type="submit" class="btn btn-sm btn-success">
+                    <i class="fas fa-save"></i> Save Shopify API
+                </button>
+            </form>
+        </div>
+
+        <!-- WooCommerce API -->
+        <div class="border rounded p-3 mb-3">
+            <h6 class="d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-wordpress text-primary"></i> WooCommerce API (resellrage.com)</span>
+                <span class="badge bg-secondary">Not Configured</span>
+            </h6>
+            <p class="small text-muted">
+                Get your API keys from: WordPress Admin → WooCommerce → Settings → Advanced → REST API
+            </p>
+            <form class="api-credentials-form" data-platform="woocommerce">
+                <div class="mb-2">
+                    <label class="form-label small">Store URL</label>
+                    <input type="text" class="form-control form-control-sm" name="store_url" placeholder="https://resellrage.com">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Consumer Key</label>
+                    <input type="text" class="form-control form-control-sm" name="consumer_key" placeholder="ck_...">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Consumer Secret</label>
+                    <input type="password" class="form-control form-control-sm" name="consumer_secret" placeholder="cs_...">
+                </div>
+                <button type="submit" class="btn btn-sm btn-success">
+                    <i class="fas fa-save"></i> Save WooCommerce API
+                </button>
+            </form>
+        </div>
+
+        <!-- Facebook Shops API -->
+        <div class="border rounded p-3 mb-3">
+            <h6 class="d-flex justify-content-between align-items-center">
+                <span><i class="fab fa-facebook text-primary"></i> Facebook Shops API</span>
+                <span class="badge bg-secondary">Not Configured</span>
+            </h6>
+            <p class="small text-muted">
+                Get your access token from: <a href="https://developers.facebook.com/" target="_blank">Facebook for Developers</a>
+            </p>
+            <form class="api-credentials-form" data-platform="facebook">
+                <div class="mb-2">
+                    <label class="form-label small">Page Access Token</label>
+                    <input type="password" class="form-control form-control-sm" name="access_token" placeholder="Your Facebook Page Access Token">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Catalog ID</label>
+                    <input type="text" class="form-control form-control-sm" name="catalog_id" placeholder="Your Facebook Catalog ID">
+                </div>
+                <button type="submit" class="btn btn-sm btn-success">
+                    <i class="fas fa-save"></i> Save Facebook API
+                </button>
+            </form>
+        </div>
+
+        <div class="alert alert-info mt-3">
+            <i class="fas fa-info-circle"></i> <strong>What's the difference?</strong><br>
+            <strong>API Platforms:</strong> Configure once, then posting is fully automated - just click "Post" and it goes live!<br>
+            <strong>CSV Platforms:</strong> Download CSV file, manually upload to platform (Poshmark, Ruby Lane, etc.)
+        </div>
+    </div>
+</div>
+
+<!-- Marketplace Credentials (CSV Platforms) -->
+<div class="card mb-3">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="fas fa-file-csv"></i> CSV Platforms (Manual Upload)</h5>
+    </div>
+    <div class="card-body">
         <p class="text-muted small">
-            Add your marketplace login credentials to enable posting automation.
+            These platforms use CSV bulk upload. We generate the CSV file for you with proper formatting.
             <strong>Your credentials are stored securely and never shared.</strong>
         </p>
 
@@ -195,6 +316,54 @@ document.querySelectorAll('.delete-creds').forEach(btn => {
                 setTimeout(() => location.reload(), 1500);
             } else {
                 showAlert(data.error || 'Failed to remove credentials', 'danger');
+            }
+        } catch (error) {
+            hideLoading();
+            showAlert('Error: ' + error.message, 'danger');
+        }
+    });
+});
+
+// API Credentials Forms
+document.querySelectorAll('.api-credentials-form').forEach(form => {
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        showLoading();
+
+        const platform = this.dataset.platform;
+        const formData = new FormData(this);
+        const credentials = {};
+
+        // Collect all form fields
+        for (const [key, value] of formData.entries()) {
+            credentials[key] = value;
+        }
+
+        // Validate required fields
+        if (Object.values(credentials).some(val => !val.trim())) {
+            hideLoading();
+            showAlert('Please fill in all required fields', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/settings/api-credentials', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    platform,
+                    credentials
+                })
+            });
+
+            const data = await response.json();
+            hideLoading();
+
+            if (data.success) {
+                showAlert(`${platform.charAt(0).toUpperCase() + platform.slice(1)} API configured! Automated posting is now enabled.`, 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showAlert(data.error || 'Failed to save API credentials', 'danger');
             }
         } catch (error) {
             hideLoading();
