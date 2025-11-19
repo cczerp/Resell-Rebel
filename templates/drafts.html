@@ -77,29 +77,231 @@
 
 {% block extra_js %}
 <script>
-async function postDraft(id) {
-    if (!confirm('Post this listing? It will become active and visible in your listings.')) return;
+function postDraft(id) {
+    // Show platform selection modal
+    let html = '<div class="modal fade" id="postDraftModal" tabindex="-1">';
+    html += '<div class="modal-dialog"><div class="modal-content">';
+    html += '<div class="modal-header bg-success text-white">';
+    html += '<h5 class="modal-title"><i class="fas fa-rocket"></i> Post Listing</h5>';
+    html += '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>';
+    html += '</div><div class="modal-body">';
+    html += '<p>Select platforms to post to:</p>';
 
-    showLoading();
+    // CSV Platforms
+    html += '<div class="mb-3">';
+    html += '<h6 class="text-muted">CSV Platforms (Manual Upload)</h6>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="poshmark" id="post_poshmark">';
+    html += '<label class="form-check-label" for="post_poshmark"><i class="fas fa-shopping-bag"></i> Poshmark</label>';
+    html += '</div>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="rubylane" id="post_rubylane">';
+    html += '<label class="form-check-label" for="post_rubylane"><i class="fas fa-gem"></i> Ruby Lane</label>';
+    html += '</div>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="threadup" id="post_threadup">';
+    html += '<label class="form-check-label" for="post_threadup"><i class="fas fa-recycle"></i> ThredUp</label>';
+    html += '</div>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="depop" id="post_depop">';
+    html += '<label class="form-check-label" for="post_depop"><i class="fas fa-tshirt"></i> Depop</label>';
+    html += '</div>';
+    html += '</div>';
 
-    try {
-        const response = await fetch(`/api/post-draft/${id}`, {
-            method: 'POST'
+    // API Platforms
+    html += '<div class="mb-3">';
+    html += '<h6 class="text-muted">API Platforms (Automated)</h6>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="etsy" id="post_etsy">';
+    html += '<label class="form-check-label" for="post_etsy"><i class="fas fa-store"></i> Etsy</label>';
+    html += '</div>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="shopify" id="post_shopify">';
+    html += '<label class="form-check-label" for="post_shopify"><i class="fas fa-shopping-cart"></i> Shopify</label>';
+    html += '</div>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="woocommerce" id="post_woocommerce">';
+    html += '<label class="form-check-label" for="post_woocommerce"><i class="fas fa-wordpress"></i> WooCommerce</label>';
+    html += '</div>';
+    html += '<div class="form-check">';
+    html += '<input class="form-check-input post-platform" type="checkbox" value="facebook" id="post_facebook">';
+    html += '<label class="form-check-label" for="post_facebook"><i class="fab fa-facebook"></i> Facebook</label>';
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div class="form-check mb-3">';
+    html += '<input class="form-check-input" type="checkbox" id="justMakeActive">';
+    html += '<label class="form-check-label" for="justMakeActive">';
+    html += '<strong>Just make it Active</strong> (don\'t post to platforms yet)';
+    html += '</label>';
+    html += '</div>';
+
+    html += '</div><div class="modal-footer">';
+    html += '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>';
+    html += `<button type="button" class="btn btn-success" onclick="confirmPostDraft(${id})">`;
+    html += '<i class="fas fa-rocket"></i> Post</button>';
+    html += '</div></div></div></div>';
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('postDraftModal');
+    if (existingModal) existingModal.remove();
+
+    // Add and show modal
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('postDraftModal'));
+    modal.show();
+}
+
+async function confirmPostDraft(id) {
+    const justMakeActive = document.getElementById('justMakeActive').checked;
+
+    if (justMakeActive) {
+        // Just change status to active
+        showLoading();
+        try {
+            const response = await fetch(`/api/post-draft/${id}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            hideLoading();
+            bootstrap.Modal.getInstance(document.getElementById('postDraftModal')).hide();
+
+            if (data.success) {
+                showAlert('Listing is now active!', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showAlert(data.error, 'danger');
+            }
+        } catch (error) {
+            hideLoading();
+            showAlert('Error: ' + error, 'danger');
+        }
+    } else {
+        // Post to selected platforms
+        const platforms = [];
+        document.querySelectorAll('.post-platform:checked').forEach(cb => {
+            platforms.push(cb.value);
         });
 
-        const data = await response.json();
-
-        if (data.success) {
-            showAlert('Listing posted successfully!', 'success');
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            showAlert(data.error, 'danger');
+        if (platforms.length === 0) {
+            showAlert('Please select at least one platform or check "Just make it Active"', 'warning');
+            return;
         }
-    } catch (error) {
-        showAlert('Post failed: ' + error, 'danger');
-    } finally {
-        hideLoading();
+
+        showLoading();
+
+        try {
+            // First make it active
+            const response1 = await fetch(`/api/post-draft/${id}`, {
+                method: 'POST'
+            });
+            const data1 = await response1.json();
+
+            if (!data1.success) {
+                hideLoading();
+                showAlert(data1.error, 'danger');
+                return;
+            }
+
+            // Then post to platforms
+            const response2 = await fetch('/api/bulk-post', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    listing_ids: [id],
+                    platforms: platforms
+                })
+            });
+
+            const data2 = await response2.json();
+
+            hideLoading();
+            bootstrap.Modal.getInstance(document.getElementById('postDraftModal')).hide();
+
+            if (data2.success) {
+                // Handle CSV downloads
+                if (data2.csv_files && Object.keys(data2.csv_files).length > 0) {
+                    showCSVDownloads(data2.csv_files);
+                }
+
+                // Handle API results
+                if (data2.api_results && data2.api_results.length > 0) {
+                    showAPIResults(data2.api_results);
+                }
+
+                showAlert('Listing posted!', 'success');
+                setTimeout(() => window.location.href = '/listings', 2000);
+            } else {
+                showAlert(data2.error || 'Posting failed', 'danger');
+            }
+        } catch (error) {
+            hideLoading();
+            showAlert('Error: ' + error, 'danger');
+        }
     }
+}
+
+// CSV Downloads Modal (copied from listings.html)
+function showCSVDownloads(csvFiles) {
+    let html = '<div class="modal fade" id="csvDownloadModal" tabindex="-1">';
+    html += '<div class="modal-dialog modal-lg"><div class="modal-content">';
+    html += '<div class="modal-header bg-success text-white">';
+    html += '<h5 class="modal-title"><i class="fas fa-file-csv"></i> CSV Files Ready</h5>';
+    html += '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>';
+    html += '</div><div class="modal-body">';
+
+    for (const [platform, fileInfo] of Object.entries(csvFiles)) {
+        if (fileInfo.error) {
+            html += `<div class="alert alert-danger">${fileInfo.platform_name}: ${fileInfo.error}</div>`;
+        } else {
+            html += `<div class="card mb-3">`;
+            html += `<div class="card-header bg-primary text-white"><h6 class="mb-0">${fileInfo.platform_name}</h6></div>`;
+            html += `<div class="card-body">`;
+            html += `<a href="${fileInfo.download_url}" class="btn btn-success mb-2" download>`;
+            html += `<i class="fas fa-download"></i> Download CSV</a>`;
+            if (fileInfo.instructions) {
+                html += `<div class="alert alert-info"><strong>Instructions:</strong><ol class="mb-0">`;
+                fileInfo.instructions.forEach(inst => { html += `<li>${inst}</li>`; });
+                html += `</ol></div>`;
+            }
+            html += `</div></div>`;
+        }
+    }
+
+    html += '</div></div></div></div>';
+
+    const existingModal = document.getElementById('csvDownloadModal');
+    if (existingModal) existingModal.remove();
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('csvDownloadModal'));
+    modal.show();
+}
+
+function showAPIResults(apiResults) {
+    let html = '<div class="modal fade" id="apiResultsModal" tabindex="-1">';
+    html += '<div class="modal-dialog modal-lg"><div class="modal-content">';
+    html += '<div class="modal-header bg-info text-white">';
+    html += '<h5 class="modal-title"><i class="fas fa-robot"></i> API Results</h5>';
+    html += '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>';
+    html += '</div><div class="modal-body">';
+
+    apiResults.forEach(result => {
+        const alertType = result.status === 'posted' ? 'success' : 'warning';
+        html += `<div class="alert alert-${alertType}">`;
+        html += `<strong>${result.platform_name}:</strong> ${result.message}`;
+        html += `</div>`;
+    });
+
+    html += '</div></div></div></div>';
+
+    const existingModal = document.getElementById('apiResultsModal');
+    if (existingModal) existingModal.remove();
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('apiResultsModal'));
+    modal.show();
 }
 
 async function deleteDraft(id) {

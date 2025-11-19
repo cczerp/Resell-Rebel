@@ -742,6 +742,22 @@ async function loadDraftData() {
 
     try {
         const response = await fetch(`/api/get-draft/${editingDraftId}`);
+
+        // Check if response is OK before parsing JSON
+        if (!response.ok) {
+            hideLoading();
+            showAlert(`Failed to load draft: Server returned ${response.status}`, 'danger');
+            return;
+        }
+
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            hideLoading();
+            showAlert('Failed to load draft: Invalid response format', 'danger');
+            return;
+        }
+
         const data = await response.json();
 
         if (data.success) {
