@@ -19,7 +19,7 @@ import uuid
 import json
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -28,6 +28,16 @@ from dotenv import load_dotenv
 from src.database import get_db
 import csv
 from io import StringIO, BytesIO
+from PIL import Image
+import base64
+
+# Platform adapters
+from src.adapters.poshmark_adapter import PoshmarkAdapter
+from src.adapters.all_platforms import (
+    EtsyAdapter, ShopifyAdapter, RubyLaneAdapter,
+    WooCommerceAdapter, FacebookShopsAdapter
+)
+from src.schema.unified_listing import UnifiedListing, Price, Photo, ListingCondition, ItemSpecifics
 
 # Load environment
 load_dotenv()
@@ -82,6 +92,119 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
+
+
+# ============================================================================
+# PLATFORM POSTING HELPERS
+# ============================================================================
+
+# Platform types: 'api' (automated) or 'csv' (manual upload)
+PLATFORM_CONFIG = {
+    'poshmark': {
+        'type': 'csv',
+        'name': 'Poshmark',
+        'instructions': [
+            '1. Log into your Poshmark account',
+            '2. Go to https://poshmark.com/sell/bulk',
+            '3. Click "Upload CSV"',
+            '4. Select the downloaded CSV file',
+            '5. Review and publish your listings'
+        ]
+    },
+    'rubylane': {
+        'type': 'csv',
+        'name': 'Ruby Lane',
+        'instructions': [
+            '1. Log into your Ruby Lane seller account',
+            '2. Go to Seller Tools → Bulk Upload',
+            '3. Upload the CSV file',
+            '4. Review and activate listings'
+        ]
+    },
+    'threadup': {
+        'type': 'csv',
+        'name': 'ThredUp',
+        'instructions': [
+            '1. Log into your ThredUp seller account',
+            '2. Navigate to bulk listing tool',
+            '3. Upload the CSV file',
+            '4. Confirm listings'
+        ]
+    },
+    'depop': {
+        'type': 'csv',
+        'name': 'Depop',
+        'instructions': [
+            '1. Depop does not support CSV bulk upload',
+            '2. You must list items individually in the Depop app',
+            '3. Use the listing details from your export as a guide'
+        ]
+    },
+    'etsy': {
+        'type': 'api',
+        'name': 'Etsy',
+        'requires_credentials': True
+    },
+    'shopify': {
+        'type': 'api',
+        'name': 'Shopify',
+        'requires_credentials': True
+    },
+    'facebook': {
+        'type': 'api',
+        'name': 'Facebook Shops',
+        'requires_credentials': True
+    },
+    'woocommerce': {
+        'type': 'api',
+        'name': 'WooCommerce',
+        'requires_credentials': True
+    }
+}
+
+
+def convert_listing_to_unified(listing_dict: dict) -> UnifiedListing:
+    """Convert database listing to UnifiedListing format"""
+
+    # Parse photos
+    photos = []
+    if listing_dict.get('photos'):
+        photo_paths = json.loads(listing_dict['photos']) if isinstance(listing_dict['photos'], str) else listing_dict['photos']
+        for i, path in enumerate(photo_paths):
+            # Convert local path to URL if needed
+            photo_url = path if path.startswith('http') else f"/uploads/{Path(path).name}"
+            photos.append(Photo(
+                url=photo_url,
+                local_path=path,
+                is_primary=(i == 0)
+            ))
+
+    # Map condition
+    condition_map = {
+        'new': ListingCondition.NEW,
+        'like_new': ListingCondition.LIKE_NEW,
+        'excellent': ListingCondition.EXCELLENT,
+        'good': ListingCondition.GOOD,
+        'fair': ListingCondition.FAIR,
+        'poor': ListingCondition.POOR
+    }
+    condition = condition_map.get(listing_dict.get('condition', 'good'), ListingCondition.GOOD)
+
+    # Create UnifiedListing
+    return UnifiedListing(
+        title=listing_dict.get('title', ''),
+        description=listing_dict.get('description', ''),
+        price=Price(amount=float(listing_dict.get('price', 0))),
+        condition=condition,
+        photos=photos,
+        item_specifics=ItemSpecifics(
+            brand=listing_dict.get('brand'),
+            size=listing_dict.get('size'),
+            color=listing_dict.get('color'),
+            material=listing_dict.get('material')
+        ),
+        sku=listing_dict.get('sku')
+    )
 
 
 # ============================================================================
@@ -366,7 +489,8 @@ def index():
 def create_listing():
     """Create new listing page - accessible to guests for AI demo"""
     is_guest = not current_user.is_authenticated
-    return render_template('create.html', is_guest=is_guest)
+    draft_id = request.args.get('draft_id', type=int)
+    return render_template('create.html', is_guest=is_guest, draft_id=draft_id)
 
 
 @app.route('/drafts')
@@ -400,10 +524,201 @@ def listings():
 def notifications():
     """View notifications"""
     if notification_manager:
-        notifs = notification_manager.get_recent_notifications(limit=50)
+        try:
+            notifs = notification_manager.get_recent_notifications(limit=50)
+            # Parse JSON data field if it's a string
+            for notif in notifs:
+                if notif.get('data') and isinstance(notif['data'], str):
+                    try:
+                        notif['data'] = json.loads(notif['data'])
+                    except:
+                        notif['data'] = {}
+        except Exception as e:
+            print(f"Error loading notifications: {e}")
+            notifs = []
     else:
         notifs = []
     return render_template('notifications.html', notifications=notifs)
+
+
+# ========================================
+# STORAGE ROUTES (Standalone Organization Tool)
+# ========================================
+
+@app.route('/storage')
+@login_required
+def storage():
+    """Main storage page - choose mode"""
+    storage_map = db.get_storage_map(current_user.id)
+    return render_template('storage.html', storage_map=storage_map)
+
+
+@app.route('/storage/clothing')
+@login_required
+def storage_clothing():
+    """Clothing bin storage system"""
+    bins = db.get_storage_bins(current_user.id, bin_type='clothing')
+    return render_template('storage_clothing.html', bins=bins)
+
+
+@app.route('/storage/cards')
+@login_required
+def storage_cards():
+    """Card storage system (A1/A2)"""
+    bins = db.get_storage_bins(current_user.id, bin_type='cards')
+
+    # Create default Bin A if no bins exist
+    if not bins:
+        bin_id = db.create_storage_bin(current_user.id, 'A', 'cards', 'Default card bin')
+        bins = db.get_storage_bins(current_user.id, bin_type='cards')
+
+    return render_template('storage_cards.html', bins=bins)
+
+
+@app.route('/storage/map')
+@login_required
+def storage_map():
+    """Visual storage map"""
+    storage_map = db.get_storage_map(current_user.id)
+    return render_template('storage_map.html', storage_map=storage_map)
+
+
+@app.route('/api/storage/create-bin', methods=['POST'])
+@login_required
+def create_storage_bin():
+    """Create new storage bin"""
+    data = request.json
+
+    try:
+        bin_name = data['bin_name']
+        bin_type = data['bin_type']
+        description = data.get('description')
+
+        bin_id = db.create_storage_bin(current_user.id, bin_name, bin_type, description)
+
+        return jsonify({'success': True, 'bin_id': bin_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/storage/create-section', methods=['POST'])
+@login_required
+def create_storage_section():
+    """Create section within bin"""
+    data = request.json
+
+    try:
+        bin_id = int(data['bin_id'])
+        section_name = data['section_name']
+        capacity = data.get('capacity')
+
+        section_id = db.create_storage_section(bin_id, section_name, capacity)
+
+        return jsonify({'success': True, 'section_id': section_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/storage/add-item', methods=['POST'])
+@login_required
+def add_storage_item():
+    """Add item to storage"""
+    data = request.json
+
+    try:
+        bin_id = int(data['bin_id'])
+        section_id = int(data['section_id']) if data.get('section_id') else None
+        item_type = data.get('item_type')
+        category = data.get('category')
+        title = data.get('title')
+        description = data.get('description')
+        quantity = int(data.get('quantity', 1))
+        photos = data.get('photos', [])
+        notes = data.get('notes')
+
+        # Get bin info for ID generation
+        bins = db.get_storage_bins(current_user.id)
+        bin = next((b for b in bins if b['id'] == bin_id), None)
+
+        if not bin:
+            return jsonify({'error': 'Bin not found'}), 404
+
+        # Get section name if section_id provided
+        section_name = None
+        if section_id:
+            sections = db.get_storage_sections(bin_id)
+            section = next((s for s in sections if s['id'] == section_id), None)
+            if section:
+                section_name = section['section_name']
+
+        # Generate storage ID
+        storage_id = db.generate_storage_id(
+            current_user.id,
+            bin['bin_name'],
+            section_name,
+            category
+        )
+
+        # Add item
+        item_id = db.add_storage_item(
+            current_user.id,
+            storage_id,
+            bin_id,
+            section_id,
+            item_type,
+            category,
+            title,
+            description,
+            quantity,
+            photos,
+            notes
+        )
+
+        return jsonify({
+            'success': True,
+            'item_id': item_id,
+            'storage_id': storage_id
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/storage/find', methods=['GET'])
+@login_required
+def find_storage_item():
+    """Find item by storage ID"""
+    storage_id = request.args.get('storage_id')
+
+    if not storage_id:
+        return jsonify({'error': 'storage_id required'}), 400
+
+    item = db.find_storage_item(current_user.id, storage_id)
+
+    if item:
+        return jsonify({'success': True, 'item': item})
+    else:
+        return jsonify({'error': 'Item not found'}), 404
+
+
+@app.route('/api/storage/items', methods=['GET'])
+@login_required
+def get_storage_items():
+    """Get storage items with filters"""
+    bin_id = request.args.get('bin_id', type=int)
+    section_id = request.args.get('section_id', type=int)
+    item_type = request.args.get('item_type')
+    limit = request.args.get('limit', 100, type=int)
+
+    items = db.get_storage_items(
+        current_user.id,
+        bin_id=bin_id,
+        section_id=section_id,
+        item_type=item_type,
+        limit=limit
+    )
+
+    return jsonify({'success': True, 'items': items})
 
 
 @app.route('/settings')
@@ -433,8 +748,6 @@ def settings():
         {'id': 'ecrater', 'name': 'eCRATER', 'icon': 'fas fa-box', 'color': 'text-info'},
         {'id': 'bonanza', 'name': 'Bonanza', 'icon': 'fas fa-star', 'color': 'text-warning'},
         {'id': 'kijiji', 'name': 'Kijiji', 'icon': 'fas fa-newspaper', 'color': 'text-danger'},
-        {'id': 'mercari', 'name': 'Mercari', 'icon': 'fas fa-box', 'color': 'text-warning'},
-        {'id': 'ebay', 'name': 'eBay', 'icon': 'fab fa-ebay', 'color': 'text-primary'},
         {'id': 'grailed', 'name': 'Grailed', 'icon': 'fas fa-user-tie', 'color': 'text-dark'},
         {'id': 'vinted', 'name': 'Vinted', 'icon': 'fas fa-recycle', 'color': 'text-success'},
         {'id': 'mercado_libre', 'name': 'Mercado Libre', 'icon': 'fas fa-globe-americas', 'color': 'text-warning'},
@@ -626,6 +939,85 @@ def upload_photos():
     })
 
 
+@app.route('/api/edit-photo', methods=['POST'])
+def edit_photo():
+    """
+    Edit a photo - crop, remove background, resize
+    FREE feature that competitors charge heavily for!
+    """
+    try:
+        data = request.get_json()
+
+        if not data or 'image' not in data or 'operation' not in data:
+            return jsonify({'error': 'Missing image or operation'}), 400
+
+        # Decode base64 image
+        image_data = data['image']
+        if image_data.startswith('data:image'):
+            # Remove data URL prefix
+            image_data = image_data.split(',')[1]
+
+        image_bytes = base64.b64decode(image_data)
+        img = Image.open(BytesIO(image_bytes))
+
+        operation = data['operation']
+
+        if operation == 'crop':
+            # Crop image with provided coordinates
+            crop_data = data.get('crop', {})
+            x = int(crop_data.get('x', 0))
+            y = int(crop_data.get('y', 0))
+            width = int(crop_data.get('width', img.width))
+            height = int(crop_data.get('height', img.height))
+
+            img = img.crop((x, y, x + width, y + height))
+
+        elif operation == 'remove-bg':
+            # Remove background using rembg (FREE!)
+            from rembg import remove
+
+            # Convert PIL Image to bytes
+            img_byte_arr = BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            img_byte_arr = img_byte_arr.getvalue()
+
+            # Remove background
+            output = remove(img_byte_arr)
+
+            # Convert back to PIL Image
+            img = Image.open(BytesIO(output))
+
+        elif operation == 'resize':
+            # Resize/enlarge image
+            new_width = int(data.get('width', img.width))
+            new_height = int(data.get('height', img.height))
+            img = img.resize((new_width, new_height), Image.LANCZOS)
+
+        else:
+            return jsonify({'error': f'Unknown operation: {operation}'}), 400
+
+        # Save edited image to temp location
+        filename = secure_filename(f"edited_{uuid.uuid4()}.png")
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        img.save(filepath, 'PNG')
+
+        # Convert to base64 for preview
+        img_byte_arr = BytesIO()
+        img.save(img_byte_arr, format='PNG')
+        img_byte_arr = img_byte_arr.getvalue()
+        img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+
+        return jsonify({
+            'success': True,
+            'image': f'data:image/png;base64,{img_base64}',
+            'filepath': filepath
+        })
+
+    except Exception as e:
+        print(f"Error editing photo: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/analyze', methods=['POST'])
 def analyze_photos():
     """Analyze photos with AI - accessible to guests"""
@@ -636,6 +1028,7 @@ def analyze_photos():
 
     try:
         from src.ai.gemini_classifier import GeminiClassifier
+        from src.ai.market_analyzer import MarketAnalyzer
         from src.schema import Photo
 
         # Create photo objects
@@ -651,6 +1044,20 @@ def analyze_photos():
         if "error" in analysis:
             return jsonify({'error': analysis['error']}), 500
 
+        # Add market analysis (sell-through rate)
+        try:
+            market_analyzer = MarketAnalyzer(db=db)
+            market_data = market_analyzer.analyze_market(
+                item_name=analysis.get('item_name', ''),
+                brand=analysis.get('brand'),
+                category=analysis.get('category'),
+                price=analysis.get('suggested_price')
+            )
+            analysis['market_analysis'] = market_data
+        except Exception as e:
+            print(f"Market analysis failed: {e}")
+            analysis['market_analysis'] = None
+
         return jsonify({
             'success': True,
             'analysis': analysis
@@ -663,61 +1070,163 @@ def analyze_photos():
 @app.route('/api/save-draft', methods=['POST'])
 @login_required
 def save_draft():
-    """Save listing as draft"""
+    """Save listing as draft or post as active (create or update)"""
     data = request.json
-    photo_paths = session.get('photo_paths', [])
+    draft_id = data.get('draft_id')
+    listing_uuid = data.get('listing_uuid')
+    status = data.get('status', 'draft')  # 'draft' or 'active'
 
-    if not photo_paths:
-        return jsonify({'error': 'No photos uploaded'}), 400
+    # Get photos from session or use existing ones
+    new_photo_paths = session.get('photo_paths', [])
 
     try:
-        listing_uuid = str(uuid.uuid4())
+        import shutil
 
-        # Copy photos to permanent storage
-        draft_photos_dir = Path("data/draft_photos") / listing_uuid
-        draft_photos_dir.mkdir(parents=True, exist_ok=True)
+        # EDITING EXISTING DRAFT
+        if draft_id and listing_uuid:
+            # Get existing listing
+            listing = db.get_listing(draft_id)
+            if not listing:
+                return jsonify({'error': 'Listing not found'}), 404
 
-        permanent_photo_paths = []
-        for i, photo_path in enumerate(photo_paths):
-            ext = Path(photo_path).suffix
-            new_filename = f"photo_{i:02d}{ext}"
-            permanent_path = draft_photos_dir / new_filename
+            # Verify ownership
+            if listing.get('user_id') != current_user.id:
+                return jsonify({'error': 'Unauthorized'}), 403
 
-            # Copy file
-            import shutil
-            shutil.copy2(photo_path, permanent_path)
-            permanent_photo_paths.append(str(permanent_path))
+            # Get existing photos
+            existing_photos = []
+            if listing.get('photos'):
+                try:
+                    existing_photos = json.loads(listing['photos']) if isinstance(listing['photos'], str) else listing['photos']
+                except:
+                    existing_photos = []
 
-        # Save to database
-        listing_id = db.create_listing(
-            listing_uuid=listing_uuid,
-            title=data.get('title', 'Untitled'),
-            description=data.get('description', ''),
-            price=float(data.get('price', 0)),
-            condition=data.get('condition', 'good'),
-            photos=permanent_photo_paths,
-            user_id=current_user.id,  # Add user_id
-            cost=float(data.get('cost')) if data.get('cost') else None,
-            item_type=data.get('item_type', 'general'),
-            quantity=int(data.get('quantity', 1)),
-            storage_location=data.get('storage_location'),
-            sku=data.get('sku'),
-            upc=data.get('upc'),
-            attributes={
-                'brand': data.get('brand'),
-                'size': data.get('size'),
-                'color': data.get('color'),
-                'shipping_cost': float(data.get('shipping_cost', 0)),
-            }
-        )
+            # Handle photos
+            draft_photos_dir = Path("data/draft_photos") / listing_uuid
+            draft_photos_dir.mkdir(parents=True, exist_ok=True)
 
-        # Clear session
-        session.pop('photo_paths', None)
+            # If new photos were uploaded, append them to existing ones
+            if new_photo_paths:
+                permanent_photo_paths = existing_photos.copy()
+                start_index = len(existing_photos)
 
-        return jsonify({
-            'success': True,
-            'listing_id': listing_id
-        })
+                for i, photo_path in enumerate(new_photo_paths):
+                    ext = Path(photo_path).suffix
+                    new_filename = f"photo_{start_index + i:02d}{ext}"
+                    permanent_path = draft_photos_dir / new_filename
+
+                    shutil.copy2(photo_path, permanent_path)
+                    permanent_photo_paths.append(str(permanent_path))
+
+                # Clear session
+                session.pop('photo_paths', None)
+            else:
+                # No new photos, keep existing ones
+                permanent_photo_paths = existing_photos
+
+            # Update listing in database
+            cursor = db.conn.cursor()
+            cursor.execute("""
+                UPDATE listings SET
+                    title = ?,
+                    description = ?,
+                    price = ?,
+                    cost = ?,
+                    condition = ?,
+                    item_type = ?,
+                    quantity = ?,
+                    storage_location = ?,
+                    sku = ?,
+                    upc = ?,
+                    photos = ?,
+                    attributes = ?,
+                    status = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND user_id = ?
+            """, (
+                data.get('title', 'Untitled'),
+                data.get('description', ''),
+                float(data.get('price', 0)),
+                float(data.get('cost')) if data.get('cost') else None,
+                data.get('condition', 'good'),
+                data.get('item_type', 'general'),
+                int(data.get('quantity', 1)),
+                data.get('storage_location'),
+                data.get('sku'),
+                data.get('upc'),
+                json.dumps(permanent_photo_paths),
+                json.dumps({
+                    'brand': data.get('brand'),
+                    'size': data.get('size'),
+                    'color': data.get('color'),
+                    'shipping_cost': float(data.get('shipping_cost', 0)),
+                }),
+                status,
+                draft_id,
+                current_user.id
+            ))
+            db.conn.commit()
+
+            msg = 'Listing posted successfully' if status == 'active' else 'Listing updated successfully'
+            return jsonify({
+                'success': True,
+                'listing_id': draft_id,
+                'message': msg
+            })
+
+        # CREATING NEW DRAFT
+        else:
+            if not new_photo_paths:
+                return jsonify({'error': 'No photos uploaded'}), 400
+
+            listing_uuid = str(uuid.uuid4())
+
+            # Copy photos to permanent storage
+            draft_photos_dir = Path("data/draft_photos") / listing_uuid
+            draft_photos_dir.mkdir(parents=True, exist_ok=True)
+
+            permanent_photo_paths = []
+            for i, photo_path in enumerate(new_photo_paths):
+                ext = Path(photo_path).suffix
+                new_filename = f"photo_{i:02d}{ext}"
+                permanent_path = draft_photos_dir / new_filename
+
+                shutil.copy2(photo_path, permanent_path)
+                permanent_photo_paths.append(str(permanent_path))
+
+            # Save to database
+            listing_id = db.create_listing(
+                listing_uuid=listing_uuid,
+                title=data.get('title', 'Untitled'),
+                description=data.get('description', ''),
+                price=float(data.get('price', 0)),
+                condition=data.get('condition', 'good'),
+                photos=permanent_photo_paths,
+                user_id=current_user.id,
+                cost=float(data.get('cost')) if data.get('cost') else None,
+                item_type=data.get('item_type', 'general'),
+                quantity=int(data.get('quantity', 1)),
+                storage_location=data.get('storage_location'),
+                sku=data.get('sku'),
+                upc=data.get('upc'),
+                status=status,  # Use status parameter
+                attributes={
+                    'brand': data.get('brand'),
+                    'size': data.get('size'),
+                    'color': data.get('color'),
+                    'shipping_cost': float(data.get('shipping_cost', 0)),
+                }
+            )
+
+            # Clear session
+            session.pop('photo_paths', None)
+
+            msg = 'Listing posted successfully' if status == 'active' else 'Listing created successfully'
+            return jsonify({
+                'success': True,
+                'listing_id': listing_id,
+                'message': msg
+            })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -737,7 +1246,7 @@ def export_csv():
         # Header
         writer.writerow(['ID', 'Title', 'Description', 'Price', 'Cost', 'Condition',
                         'Brand', 'Size', 'Color', 'Storage Location', 'Quantity',
-                        'Shipping Cost', 'Created'])
+                        'Shipping Cost', 'Photo Paths', 'Created'])
 
         # Data
         for draft in drafts:
@@ -748,6 +1257,24 @@ def export_csv():
                     attrs = json.loads(draft['attributes'])
                 except:
                     pass
+
+            # Parse photos and convert to full URLs
+            photos = []
+            if draft.get('photos'):
+                try:
+                    photos = json.loads(draft['photos']) if isinstance(draft['photos'], str) else draft['photos']
+                except:
+                    photos = []
+
+            # Convert file paths to full URLs
+            photo_urls = []
+            for photo_path in photos:
+                # Create full URL: http://localhost:5000/data/draft_photos/uuid/photo_00.jpg
+                photo_url = request.host_url.rstrip('/') + '/' + photo_path
+                photo_urls.append(photo_url)
+
+            # Join photo URLs with semicolon
+            photo_paths_str = ';'.join(photo_urls) if photo_urls else ''
 
             writer.writerow([
                 draft['id'],
@@ -762,6 +1289,7 @@ def export_csv():
                 draft.get('storage_location', ''),
                 draft.get('quantity', 1),
                 attrs.get('shipping_cost', ''),
+                photo_paths_str,
                 draft['created_at']
             ])
 
@@ -819,6 +1347,245 @@ def import_csv():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/bulk-post', methods=['POST'])
+@login_required
+def bulk_post():
+    """
+    Bulk post multiple listings to selected platforms.
+    Supports both API automation and CSV generation.
+    """
+    data = request.json
+
+    try:
+        listing_ids = data.get('listing_ids', [])
+        platforms = data.get('platforms', [])
+
+        if not listing_ids:
+            return jsonify({'error': 'No listings selected'}), 400
+
+        if not platforms:
+            return jsonify({'error': 'No platforms selected'}), 400
+
+        # Separate platforms by type
+        csv_platforms = [p for p in platforms if PLATFORM_CONFIG.get(p, {}).get('type') == 'csv']
+        api_platforms = [p for p in platforms if PLATFORM_CONFIG.get(p, {}).get('type') == 'api']
+
+        # Get all listings
+        listings = []
+        for listing_id in listing_ids:
+            listing = db.get_listing(listing_id)
+            if listing and listing.get('user_id') == current_user.id:
+                listings.append(listing)
+
+        if not listings:
+            return jsonify({'error': 'No valid listings found'}), 404
+
+        results = {
+            'csv_files': {},
+            'api_results': [],
+            'success': True
+        }
+
+        # Generate CSV files for CSV platforms
+        for platform in csv_platforms:
+            try:
+                # Convert to UnifiedListings
+                unified_listings = [convert_listing_to_unified(l) for l in listings]
+
+                # Generate CSV based on platform
+                if platform == 'poshmark':
+                    adapter = PoshmarkAdapter(output_dir='./data/csv_exports')
+                    csv_path = adapter.generate_csv(unified_listings)
+                elif platform == 'rubylane':
+                    adapter = RubyLaneAdapter(output_dir='./data/csv_exports')
+                    csv_path = adapter.generate_csv(unified_listings)
+                elif platform in ['threadup', 'depop']:
+                    # Generic CSV for platforms without specific adapters
+                    csv_path = generate_generic_csv(unified_listings, platform)
+                else:
+                    continue
+
+                # Save CSV file info
+                results['csv_files'][platform] = {
+                    'filename': Path(csv_path).name,
+                    'path': csv_path,
+                    'download_url': f'/api/download-csv/{Path(csv_path).name}',
+                    'instructions': PLATFORM_CONFIG[platform]['instructions'],
+                    'platform_name': PLATFORM_CONFIG[platform]['name']
+                }
+
+                # Update listing platform statuses
+                for listing in listings:
+                    current_statuses = listing.get('platform_statuses', '') or ''
+                    status_list = [s for s in current_statuses.split(',') if s and s.strip()]
+                    status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
+                    status_list.append(f"{platform}:csv_ready")
+                    db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
+
+            except Exception as e:
+                results['csv_files'][platform] = {
+                    'error': str(e),
+                    'platform_name': PLATFORM_CONFIG[platform]['name']
+                }
+                results['success'] = False
+
+        # Post to API platforms (when credentials are configured)
+        for platform in api_platforms:
+            platform_config = PLATFORM_CONFIG.get(platform, {})
+
+            # Check if user has credentials for this platform
+            creds_data = db.get_marketplace_credentials(current_user.id, f"api_{platform}")
+
+            if not creds_data or not creds_data.get('password'):
+                # No credentials configured
+                for listing in listings:
+                    results['api_results'].append({
+                        'listing_id': listing['id'],
+                        'platform': platform,
+                        'status': 'credentials_required',
+                        'message': f'Please configure {platform_config["name"]} API credentials in Settings to enable automated posting.',
+                        'platform_name': platform_config['name']
+                    })
+
+                    # Update status to show credentials needed
+                    current_statuses = listing.get('platform_statuses', '') or ''
+                    status_list = [s for s in current_statuses.split(',') if s and s.strip()]
+                    status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
+                    status_list.append(f"{platform}:needs_credentials")
+                    db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
+            else:
+                # Credentials are configured - attempt API posting
+                try:
+                    credentials = json.loads(creds_data['password'])
+
+                    # Initialize appropriate adapter
+                    adapter = None
+                    if platform == 'etsy':
+                        adapter = EtsyAdapter(
+                            api_key=credentials.get('api_key'),
+                            shop_id=credentials.get('shop_id')
+                        )
+                    elif platform == 'shopify':
+                        adapter = ShopifyAdapter(
+                            store_url=credentials.get('store_url'),
+                            access_token=credentials.get('access_token')
+                        )
+                    elif platform == 'woocommerce':
+                        adapter = WooCommerceAdapter(
+                            store_url=credentials.get('store_url'),
+                            consumer_key=credentials.get('consumer_key'),
+                            consumer_secret=credentials.get('consumer_secret')
+                        )
+                    elif platform == 'facebook':
+                        adapter = FacebookShopsAdapter(
+                            access_token=credentials.get('access_token'),
+                            catalog_id=credentials.get('catalog_id')
+                        )
+
+                    if adapter:
+                        # Post each listing
+                        for listing in listings:
+                            unified_listing = convert_listing_to_unified(listing)
+                            post_result = adapter.publish_listing(unified_listing)
+
+                            if post_result.get('success'):
+                                results['api_results'].append({
+                                    'listing_id': listing['id'],
+                                    'platform': platform,
+                                    'status': 'posted',
+                                    'message': f'Successfully posted to {platform_config["name"]}!',
+                                    'platform_name': platform_config['name'],
+                                    'listing_url': post_result.get('listing_url')
+                                })
+
+                                # Update status
+                                current_statuses = listing.get('platform_statuses', '') or ''
+                                status_list = [s for s in current_statuses.split(',') if s and s.strip()]
+                                status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
+                                status_list.append(f"{platform}:posted")
+                                db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
+                            else:
+                                results['api_results'].append({
+                                    'listing_id': listing['id'],
+                                    'platform': platform,
+                                    'status': 'failed',
+                                    'message': f'Failed to post to {platform_config["name"]}: {post_result.get("error")}',
+                                    'platform_name': platform_config['name']
+                                })
+                                results['success'] = False
+
+                except Exception as e:
+                    for listing in listings:
+                        results['api_results'].append({
+                            'listing_id': listing['id'],
+                            'platform': platform,
+                            'status': 'error',
+                            'message': f'Error posting to {platform_config["name"]}: {str(e)}',
+                            'platform_name': platform_config['name']
+                        })
+                    results['success'] = False
+
+        return jsonify(results)
+
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
+def generate_generic_csv(listings, platform_name):
+    """Generate a generic CSV for platforms without specific adapters"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_dir = Path('./data/csv_exports')
+    csv_dir.mkdir(parents=True, exist_ok=True)
+    filepath = csv_dir / f"{platform_name}_{timestamp}.csv"
+
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            'Title', 'Description', 'Price', 'Brand', 'Size',
+            'Color', 'Condition', 'Photo 1', 'Photo 2', 'Photo 3'
+        ])
+        writer.writeheader()
+
+        for listing in listings:
+            photos = listing.photos[:3] if listing.photos else []
+            writer.writerow({
+                'Title': listing.title,
+                'Description': listing.description,
+                'Price': f"${listing.price.amount:.2f}",
+                'Brand': listing.item_specifics.brand or '',
+                'Size': listing.item_specifics.size or '',
+                'Color': listing.item_specifics.color or '',
+                'Condition': listing.condition.value,
+                'Photo 1': photos[0].url if len(photos) > 0 else '',
+                'Photo 2': photos[1].url if len(photos) > 1 else '',
+                'Photo 3': photos[2].url if len(photos) > 2 else '',
+            })
+
+    return str(filepath)
+
+
+@app.route('/api/download-csv/<filename>', methods=['GET'])
+@login_required
+def download_csv(filename):
+    """Download generated CSV file"""
+    try:
+        # Sanitize filename
+        safe_filename = secure_filename(filename)
+        filepath = Path('./data/csv_exports') / safe_filename
+
+        if not filepath.exists():
+            return jsonify({'error': 'File not found'}), 404
+
+        return send_file(
+            filepath,
+            as_attachment=True,
+            download_name=safe_filename,
+            mimetype='text/csv'
+        )
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/mark-sold', methods=['POST'])
 @login_required
 def mark_sold():
@@ -869,6 +1636,112 @@ def mark_sold():
             'storage_location': listing.get('storage_location'),
             'remaining_quantity': remaining_quantity
         })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/get-draft/<int:listing_id>', methods=['GET'])
+@login_required
+def get_draft(listing_id):
+    """Get a draft for editing"""
+    try:
+        listing = db.get_listing(listing_id)
+
+        if not listing:
+            return jsonify({'error': 'Listing not found'}), 404
+
+        # Verify ownership
+        if listing.get('user_id') != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        # Parse photos and attributes
+        photos = []
+        if listing.get('photos'):
+            try:
+                photos = json.loads(listing['photos']) if isinstance(listing['photos'], str) else listing['photos']
+            except:
+                photos = []
+
+        attributes = {}
+        if listing.get('attributes'):
+            try:
+                attributes = json.loads(listing['attributes']) if isinstance(listing['attributes'], str) else listing['attributes']
+            except:
+                attributes = {}
+
+        # Return draft data
+        return jsonify({
+            'success': True,
+            'listing': {
+                'id': listing['id'],
+                'listing_uuid': listing.get('listing_uuid'),
+                'title': listing.get('title', ''),
+                'description': listing.get('description', ''),
+                'price': listing.get('price', 0),
+                'cost': listing.get('cost'),
+                'condition': listing.get('condition', 'good'),
+                'item_type': listing.get('item_type', 'general'),
+                'quantity': listing.get('quantity', 1),
+                'storage_location': listing.get('storage_location', ''),
+                'sku': listing.get('sku', ''),
+                'upc': listing.get('upc', ''),
+                'photos': photos,
+                'brand': attributes.get('brand', ''),
+                'size': attributes.get('size', ''),
+                'color': attributes.get('color', ''),
+                'shipping_cost': attributes.get('shipping_cost', 0)
+            }
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/data/draft_photos/<path:filepath>')
+@login_required
+def serve_draft_photo(filepath):
+    """Serve draft photos"""
+    try:
+        photo_path = Path('data/draft_photos') / filepath
+
+        # Security check - ensure path doesn't escape draft_photos directory
+        if not photo_path.resolve().is_relative_to(Path('data/draft_photos').resolve()):
+            return jsonify({'error': 'Invalid path'}), 403
+
+        if not photo_path.exists():
+            return jsonify({'error': 'Photo not found'}), 404
+
+        return send_file(photo_path)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/post-draft/<int:listing_id>', methods=['POST'])
+@login_required
+def post_draft(listing_id):
+    """Post a draft (make it active)"""
+    try:
+        listing = db.get_listing(listing_id)
+
+        if not listing:
+            return jsonify({'error': 'Listing not found'}), 404
+
+        # Verify ownership
+        if listing.get('user_id') != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        # Update status to active
+        cursor = db.conn.cursor()
+        cursor.execute("""
+            UPDATE listings
+            SET status = 'active',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND user_id = ?
+        """, (listing_id, current_user.id))
+        db.conn.commit()
+
+        return jsonify({'success': True})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -942,10 +1815,10 @@ def save_marketplace_credentials():
         valid_platforms = [
             'etsy', 'poshmark', 'depop', 'offerup', 'shopify', 'craigslist',
             'facebook', 'tiktok_shop', 'woocommerce', 'nextdoor', 'varagesale',
-            'ruby_lane', 'ecrater', 'bonanza', 'kijiji', 'mercari', 'ebay',
+            'ruby_lane', 'ecrater', 'bonanza', 'kijiji',
             'personal_website', 'grailed', 'vinted', 'mercado_libre',
             'tradesy', 'vestiaire', 'rebag', 'thredup', 'poshmark_ca',
-            'ebay_uk', 'other'
+            'other'
         ]
         if platform.lower() not in valid_platforms:
             return jsonify({'error': 'Invalid platform'}), 400
@@ -965,6 +1838,102 @@ def delete_marketplace_credentials(platform):
     try:
         db.delete_marketplace_credentials(current_user.id, platform.lower())
         return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/api-credentials', methods=['POST'])
+@login_required
+def save_api_credentials():
+    """Save API credentials for automated platforms"""
+    try:
+        data = request.json
+        platform = data.get('platform')
+        credentials = data.get('credentials')
+
+        if not platform:
+            return jsonify({'error': 'Platform is required'}), 400
+
+        if not credentials:
+            return jsonify({'error': 'Credentials are required'}), 400
+
+        # Validate platform
+        valid_api_platforms = ['etsy', 'shopify', 'woocommerce', 'facebook']
+        if platform.lower() not in valid_api_platforms:
+            return jsonify({'error': 'Invalid API platform'}), 400
+
+        # Store API credentials as JSON in database
+        # For now, we'll use the marketplace_credentials table but with a special format
+        # In production, you'd want a separate api_credentials table
+        credentials_json = json.dumps(credentials)
+        db.save_marketplace_credentials(current_user.id, f"api_{platform.lower()}", "api_token", credentials_json)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/settings/api-credentials/<platform>', methods=['GET'])
+@login_required
+def get_api_credentials(platform):
+    """Get API credentials for a platform"""
+    try:
+        # Get stored credentials
+        creds = db.get_marketplace_credentials(current_user.id, f"api_{platform.lower()}")
+
+        if creds and creds.get('password'):
+            # Password field contains the JSON credentials
+            credentials = json.loads(creds['password'])
+            return jsonify({
+                'success': True,
+                'credentials': credentials,
+                'configured': True
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'configured': False
+            })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# BABY BIRD (Knowledge Distillation) API
+# ============================================================================
+
+@app.route('/api/baby-bird/status', methods=['GET'])
+@login_required
+def baby_bird_status():
+    """Get training progress for knowledge distillation"""
+    try:
+        from src.ai.knowledge_distillation import get_baby_bird_status
+
+        status = get_baby_bird_status(db)
+        return jsonify(status)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/baby-bird/export', methods=['POST'])
+@admin_required
+def baby_bird_export():
+    """Export training dataset (admin only)"""
+    try:
+        output_path = request.json.get('output_path', './data/training_dataset.jsonl')
+
+        sample_count = db.export_training_dataset(output_path, format="jsonl")
+
+        return jsonify({
+            'success': True,
+            'sample_count': sample_count,
+            'output_path': output_path,
+            'message': f'Exported {sample_count} training samples. Ready to train the baby bird!'
+        })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -3,14 +3,118 @@
 {% block title %}Active Listings{% endblock %}
 
 {% block content %}
-<h2 class="mb-4"><i class="fas fa-list"></i> Active Listings</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="fas fa-list"></i> Active Listings</h2>
+    {% if listings %}
+    <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+        <label class="form-check-label" for="selectAll">
+            Select All
+        </label>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Bulk Action Bar (hidden by default) -->
+<div id="bulkActionBar" class="card mb-3" style="display:none;">
+    <div class="card-body">
+        <h5><i class="fas fa-rocket"></i> Post Selected Items (<span id="selectedCount">0</span>)</h5>
+        <p class="text-muted mb-3">Choose platforms to post to:</p>
+
+        <div class="row mb-3">
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_poshmark" value="poshmark">
+                    <label class="form-check-label" for="platform_poshmark">
+                        <i class="fas fa-shopping-bag"></i> Poshmark
+                    </label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_rubylane" value="rubylane">
+                    <label class="form-check-label" for="platform_rubylane">
+                        <i class="fas fa-gem"></i> Ruby Lane
+                    </label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_depop" value="depop">
+                    <label class="form-check-label" for="platform_depop">
+                        <i class="fas fa-tshirt"></i> Depop
+                    </label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_threadup" value="threadup">
+                    <label class="form-check-label" for="platform_threadup">
+                        <i class="fas fa-recycle"></i> ThredUp
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_etsy" value="etsy">
+                    <label class="form-check-label" for="platform_etsy">
+                        <i class="fas fa-store"></i> Etsy (API)
+                    </label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_shopify" value="shopify">
+                    <label class="form-check-label" for="platform_shopify">
+                        <i class="fas fa-shopping-cart"></i> Shopify (API)
+                    </label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_facebook" value="facebook">
+                    <label class="form-check-label" for="platform_facebook">
+                        <i class="fab fa-facebook"></i> Facebook (API)
+                    </label>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="platform_woocommerce" value="woocommerce">
+                    <label class="form-check-label" for="platform_woocommerce">
+                        <i class="fas fa-wordpress"></i> WooCommerce (API)
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-success" onclick="bulkPost()">
+                <i class="fas fa-rocket"></i> Post to Selected Platforms
+            </button>
+            <button class="btn btn-outline-secondary" onclick="clearSelection()">
+                <i class="fas fa-times"></i> Clear Selection
+            </button>
+        </div>
+    </div>
+</div>
 
 {% if listings %}
     {% for listing in listings %}
     <div class="card mb-3">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-start mb-2">
-                <h5 class="card-title mb-0">{{ listing.title }}</h5>
+                <div class="d-flex align-items-start gap-2 flex-grow-1">
+                    <div class="form-check mt-1">
+                        <input class="form-check-input listing-checkbox" type="checkbox" value="{{ listing.id }}"
+                               data-title="{{ listing.title }}" data-category="{{ listing.item_type or 'general' }}"
+                               onchange="updateBulkActionBar()">
+                    </div>
+                    <h5 class="card-title mb-0">{{ listing.title }}</h5>
+                </div>
                 <span class="badge bg-{{ 'success' if listing.status == 'active' else 'secondary' }}">
                     {{ listing.status }}
                 </span>
@@ -65,6 +169,240 @@
 
 {% block extra_js %}
 <script>
+// ========================================
+// BULK POSTING FUNCTIONS
+// ========================================
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.listing-checkbox');
+
+    checkboxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+    });
+
+    updateBulkActionBar();
+}
+
+function updateBulkActionBar() {
+    const checkboxes = document.querySelectorAll('.listing-checkbox:checked');
+    const count = checkboxes.length;
+    const bulkActionBar = document.getElementById('bulkActionBar');
+    const selectedCount = document.getElementById('selectedCount');
+
+    selectedCount.textContent = count;
+
+    if (count > 0) {
+        bulkActionBar.style.display = 'block';
+    } else {
+        bulkActionBar.style.display = 'none';
+    }
+
+    // Update "Select All" checkbox state
+    const allCheckboxes = document.querySelectorAll('.listing-checkbox');
+    const selectAll = document.getElementById('selectAll');
+    if (selectAll) {
+        selectAll.checked = allCheckboxes.length > 0 && count === allCheckboxes.length;
+    }
+}
+
+function clearSelection() {
+    const checkboxes = document.querySelectorAll('.listing-checkbox');
+    checkboxes.forEach(cb => cb.checked = false);
+    document.getElementById('selectAll').checked = false;
+    updateBulkActionBar();
+}
+
+async function bulkPost() {
+    // Get selected listing IDs
+    const checkboxes = document.querySelectorAll('.listing-checkbox:checked');
+    const listingIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (listingIds.length === 0) {
+        showAlert('Please select at least one item to post', 'warning');
+        return;
+    }
+
+    // Get selected platforms
+    const platforms = [];
+    if (document.getElementById('platform_poshmark').checked) platforms.push('poshmark');
+    if (document.getElementById('platform_rubylane').checked) platforms.push('rubylane');
+    if (document.getElementById('platform_depop').checked) platforms.push('depop');
+    if (document.getElementById('platform_threadup').checked) platforms.push('threadup');
+    if (document.getElementById('platform_etsy').checked) platforms.push('etsy');
+    if (document.getElementById('platform_shopify').checked) platforms.push('shopify');
+    if (document.getElementById('platform_facebook').checked) platforms.push('facebook');
+    if (document.getElementById('platform_woocommerce').checked) platforms.push('woocommerce');
+
+    if (platforms.length === 0) {
+        showAlert('Please select at least one platform to post to', 'warning');
+        return;
+    }
+
+    // Confirm action
+    const confirmMsg = `Post ${listingIds.length} item(s) to ${platforms.join(', ')}?`;
+    if (!confirm(confirmMsg)) return;
+
+    showLoading();
+
+    try {
+        const response = await fetch('/api/bulk-post', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                listing_ids: listingIds,
+                platforms: platforms
+            })
+        });
+
+        const data = await response.json();
+
+        hideLoading();
+
+        if (data.success) {
+            // Handle CSV downloads
+            if (data.csv_files && Object.keys(data.csv_files).length > 0) {
+                showCSVDownloads(data.csv_files);
+            }
+
+            // Handle API results
+            if (data.api_results && data.api_results.length > 0) {
+                showAPIResults(data.api_results);
+            }
+
+            // If no CSV files or API results, show generic success
+            if (!data.csv_files || Object.keys(data.csv_files).length === 0) {
+                if (!data.api_results || data.api_results.length === 0) {
+                    showAlert('Processing complete!', 'success');
+                }
+            }
+        } else {
+            showAlert(data.error || 'Bulk post failed', 'danger');
+        }
+    } catch (error) {
+        hideLoading();
+        showAlert('Failed: ' + error, 'danger');
+    }
+}
+
+function showCSVDownloads(csvFiles) {
+    let html = '<div class="modal fade" id="csvDownloadModal" tabindex="-1">';
+    html += '<div class="modal-dialog modal-lg"><div class="modal-content">';
+    html += '<div class="modal-header bg-success text-white">';
+    html += '<h5 class="modal-title"><i class="fas fa-file-csv"></i> CSV Files Ready for Download</h5>';
+    html += '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>';
+    html += '</div><div class="modal-body">';
+
+    for (const [platform, fileInfo] of Object.entries(csvFiles)) {
+        if (fileInfo.error) {
+            html += `<div class="alert alert-danger">`;
+            html += `<strong>${fileInfo.platform_name}:</strong> ${fileInfo.error}`;
+            html += `</div>`;
+        } else {
+            html += `<div class="card mb-3">`;
+            html += `<div class="card-header bg-primary text-white">`;
+            html += `<h6 class="mb-0"><i class="fas fa-gem"></i> ${fileInfo.platform_name}</h6>`;
+            html += `</div><div class="card-body">`;
+            html += `<p><strong>File:</strong> ${fileInfo.filename}</p>`;
+            html += `<a href="${fileInfo.download_url}" class="btn btn-success mb-3" download>`;
+            html += `<i class="fas fa-download"></i> Download ${fileInfo.platform_name} CSV`;
+            html += `</a>`;
+
+            if (fileInfo.instructions) {
+                html += `<div class="alert alert-info">`;
+                html += `<strong>Upload Instructions:</strong><br>`;
+                html += `<ol class="mb-0">`;
+                fileInfo.instructions.forEach(inst => {
+                    html += `<li>${inst}</li>`;
+                });
+                html += `</ol></div>`;
+            }
+            html += `</div></div>`;
+        }
+    }
+
+    html += '</div><div class="modal-footer">';
+    html += '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
+    html += '</div></div></div></div>';
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('csvDownloadModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add and show modal
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('csvDownloadModal'));
+    modal.show();
+
+    // Reload page when modal closes
+    document.getElementById('csvDownloadModal').addEventListener('hidden.bs.modal', () => {
+        location.reload();
+    });
+}
+
+function showAPIResults(apiResults) {
+    let html = '<div class="modal fade" id="apiResultsModal" tabindex="-1">';
+    html += '<div class="modal-dialog modal-lg"><div class="modal-content">';
+    html += '<div class="modal-header bg-info text-white">';
+    html += '<h5 class="modal-title"><i class="fas fa-robot"></i> API Platform Results</h5>';
+    html += '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>';
+    html += '</div><div class="modal-body">';
+
+    const byPlatform = {};
+    apiResults.forEach(result => {
+        if (!byPlatform[result.platform]) {
+            byPlatform[result.platform] = [];
+        }
+        byPlatform[result.platform].push(result);
+    });
+
+    for (const [platform, results] of Object.entries(byPlatform)) {
+        const platformName = results[0].platform_name || platform;
+        html += `<div class="card mb-3">`;
+        html += `<div class="card-header bg-warning">`;
+        html += `<h6 class="mb-0"><i class="fas fa-key"></i> ${platformName}</h6>`;
+        html += `</div><div class="card-body">`;
+
+        results.forEach(result => {
+            html += `<div class="alert alert-warning">`;
+            html += `<strong>Listing ID ${result.listing_id}:</strong><br>`;
+            html += `${result.message}`;
+            html += `</div>`;
+        });
+
+        html += `<a href="/settings" class="btn btn-primary">`;
+        html += `<i class="fas fa-cog"></i> Configure ${platformName} API`;
+        html += `</a>`;
+        html += `</div></div>`;
+    }
+
+    html += '</div><div class="modal-footer">';
+    html += '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>';
+    html += '</div></div></div></div>';
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('apiResultsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add and show modal
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('apiResultsModal'));
+    modal.show();
+
+    // Reload page when modal closes
+    document.getElementById('apiResultsModal').addEventListener('hidden.bs.modal', () => {
+        location.reload();
+    });
+}
+
+// ========================================
+// MARK SOLD FUNCTION
+// ========================================
+
 async function markSold(id) {
     const soldPrice = prompt('Sold price? (leave blank for listed price)');
     if (soldPrice === null) return; // User canceled
