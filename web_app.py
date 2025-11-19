@@ -31,6 +31,14 @@ from io import StringIO, BytesIO
 from PIL import Image
 import base64
 
+# Platform adapters
+from src.adapters.poshmark_adapter import PoshmarkAdapter
+from src.adapters.all_platforms import (
+    EtsyAdapter, ShopifyAdapter, RubyLaneAdapter,
+    WooCommerceAdapter, FacebookShopsAdapter
+)
+from src.schema.unified_listing import UnifiedListing, Price, Photo, ListingCondition, ItemSpecifics
+
 # Load environment
 load_dotenv()
 
@@ -84,6 +92,119 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
+
+
+# ============================================================================
+# PLATFORM POSTING HELPERS
+# ============================================================================
+
+# Platform types: 'api' (automated) or 'csv' (manual upload)
+PLATFORM_CONFIG = {
+    'poshmark': {
+        'type': 'csv',
+        'name': 'Poshmark',
+        'instructions': [
+            '1. Log into your Poshmark account',
+            '2. Go to https://poshmark.com/sell/bulk',
+            '3. Click "Upload CSV"',
+            '4. Select the downloaded CSV file',
+            '5. Review and publish your listings'
+        ]
+    },
+    'rubylane': {
+        'type': 'csv',
+        'name': 'Ruby Lane',
+        'instructions': [
+            '1. Log into your Ruby Lane seller account',
+            '2. Go to Seller Tools → Bulk Upload',
+            '3. Upload the CSV file',
+            '4. Review and activate listings'
+        ]
+    },
+    'threadup': {
+        'type': 'csv',
+        'name': 'ThredUp',
+        'instructions': [
+            '1. Log into your ThredUp seller account',
+            '2. Navigate to bulk listing tool',
+            '3. Upload the CSV file',
+            '4. Confirm listings'
+        ]
+    },
+    'depop': {
+        'type': 'csv',
+        'name': 'Depop',
+        'instructions': [
+            '1. Depop does not support CSV bulk upload',
+            '2. You must list items individually in the Depop app',
+            '3. Use the listing details from your export as a guide'
+        ]
+    },
+    'etsy': {
+        'type': 'api',
+        'name': 'Etsy',
+        'requires_credentials': True
+    },
+    'shopify': {
+        'type': 'api',
+        'name': 'Shopify',
+        'requires_credentials': True
+    },
+    'facebook': {
+        'type': 'api',
+        'name': 'Facebook Shops',
+        'requires_credentials': True
+    },
+    'woocommerce': {
+        'type': 'api',
+        'name': 'WooCommerce',
+        'requires_credentials': True
+    }
+}
+
+
+def convert_listing_to_unified(listing_dict: dict) -> UnifiedListing:
+    """Convert database listing to UnifiedListing format"""
+
+    # Parse photos
+    photos = []
+    if listing_dict.get('photos'):
+        photo_paths = json.loads(listing_dict['photos']) if isinstance(listing_dict['photos'], str) else listing_dict['photos']
+        for i, path in enumerate(photo_paths):
+            # Convert local path to URL if needed
+            photo_url = path if path.startswith('http') else f"/uploads/{Path(path).name}"
+            photos.append(Photo(
+                url=photo_url,
+                local_path=path,
+                is_primary=(i == 0)
+            ))
+
+    # Map condition
+    condition_map = {
+        'new': ListingCondition.NEW,
+        'like_new': ListingCondition.LIKE_NEW,
+        'excellent': ListingCondition.EXCELLENT,
+        'good': ListingCondition.GOOD,
+        'fair': ListingCondition.FAIR,
+        'poor': ListingCondition.POOR
+    }
+    condition = condition_map.get(listing_dict.get('condition', 'good'), ListingCondition.GOOD)
+
+    # Create UnifiedListing
+    return UnifiedListing(
+        title=listing_dict.get('title', ''),
+        description=listing_dict.get('description', ''),
+        price=Price(amount=float(listing_dict.get('price', 0))),
+        condition=condition,
+        photos=photos,
+        item_specifics=ItemSpecifics(
+            brand=listing_dict.get('brand'),
+            size=listing_dict.get('size'),
+            color=listing_dict.get('color'),
+            material=listing_dict.get('material')
+        ),
+        sku=listing_dict.get('sku')
+    )
 
 
 # ============================================================================
@@ -1231,7 +1352,7 @@ def import_csv():
 def bulk_post():
     """
     Bulk post multiple listings to selected platforms.
-    Allows users to select specific items and platforms for posting.
+    Supports both API automation and CSV generation.
     """
     data = request.json
 
@@ -1245,86 +1366,149 @@ def bulk_post():
         if not platforms:
             return jsonify({'error': 'No platforms selected'}), 400
 
-        results = []
-        success_count = 0
-        fail_count = 0
+        # Separate platforms by type
+        csv_platforms = [p for p in platforms if PLATFORM_CONFIG.get(p, {}).get('type') == 'csv']
+        api_platforms = [p for p in platforms if PLATFORM_CONFIG.get(p, {}).get('type') == 'api']
 
+        # Get all listings
+        listings = []
         for listing_id in listing_ids:
-            # Get listing
             listing = db.get_listing(listing_id)
+            if listing and listing.get('user_id') == current_user.id:
+                listings.append(listing)
 
-            if not listing:
-                results.append({
-                    'listing_id': listing_id,
-                    'success': False,
-                    'error': 'Listing not found'
-                })
-                fail_count += 1
-                continue
+        if not listings:
+            return jsonify({'error': 'No valid listings found'}), 404
 
-            # Verify ownership
-            if listing.get('user_id') != current_user.id:
-                results.append({
-                    'listing_id': listing_id,
-                    'success': False,
-                    'error': 'Unauthorized'
-                })
-                fail_count += 1
-                continue
+        results = {
+            'csv_files': {},
+            'api_results': [],
+            'success': True
+        }
 
-            # Post to each selected platform
-            platform_results = {}
-            listing_success = True
+        # Generate CSV files for CSV platforms
+        for platform in csv_platforms:
+            try:
+                # Convert to UnifiedListings
+                unified_listings = [convert_listing_to_unified(l) for l in listings]
 
-            for platform in platforms:
-                try:
-                    # Here you would integrate with each platform's API
-                    # For now, we'll just update the database to track the posting
+                # Generate CSV based on platform
+                if platform == 'poshmark':
+                    adapter = PoshmarkAdapter(output_dir='./data/csv_exports')
+                    csv_path = adapter.generate_csv(unified_listings)
+                elif platform == 'rubylane':
+                    adapter = RubyLaneAdapter(output_dir='./data/csv_exports')
+                    csv_path = adapter.generate_csv(unified_listings)
+                elif platform in ['threadup', 'depop']:
+                    # Generic CSV for platforms without specific adapters
+                    csv_path = generate_generic_csv(unified_listings, platform)
+                else:
+                    continue
 
-                    # Update platform_statuses field
+                # Save CSV file info
+                results['csv_files'][platform] = {
+                    'filename': Path(csv_path).name,
+                    'path': csv_path,
+                    'download_url': f'/api/download-csv/{Path(csv_path).name}',
+                    'instructions': PLATFORM_CONFIG[platform]['instructions'],
+                    'platform_name': PLATFORM_CONFIG[platform]['name']
+                }
+
+                # Update listing platform statuses
+                for listing in listings:
                     current_statuses = listing.get('platform_statuses', '') or ''
-                    status_list = [s for s in current_statuses.split(',') if s]
-
-                    # Remove existing status for this platform
+                    status_list = [s for s in current_statuses.split(',') if s and s.strip()]
                     status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
+                    status_list.append(f"{platform}:csv_ready")
+                    db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
 
-                    # Add new status
-                    status_list.append(f"{platform}:pending")
+            except Exception as e:
+                results['csv_files'][platform] = {
+                    'error': str(e),
+                    'platform_name': PLATFORM_CONFIG[platform]['name']
+                }
+                results['success'] = False
 
-                    new_statuses = ','.join(status_list)
+        # Post to API platforms (when credentials are configured)
+        for platform in api_platforms:
+            platform_config = PLATFORM_CONFIG.get(platform, {})
 
-                    # Update listing
-                    db.update_listing(listing_id, {
-                        'platform_statuses': new_statuses
-                    })
+            # Check if user has credentials for this platform
+            # For now, we'll mark as "credentials_required"
+            # In production, you'd check database for stored credentials
 
-                    platform_results[platform] = 'success'
+            for listing in listings:
+                results['api_results'].append({
+                    'listing_id': listing['id'],
+                    'platform': platform,
+                    'status': 'credentials_required',
+                    'message': f'Please configure {platform_config["name"]} API credentials in Settings to enable automated posting.',
+                    'platform_name': platform_config['name']
+                })
 
-                except Exception as e:
-                    platform_results[platform] = f'failed: {str(e)}'
-                    listing_success = False
+                # Update status to show credentials needed
+                current_statuses = listing.get('platform_statuses', '') or ''
+                status_list = [s for s in current_statuses.split(',') if s and s.strip()]
+                status_list = [s for s in status_list if not s.startswith(f"{platform}:")]
+                status_list.append(f"{platform}:needs_credentials")
+                db.update_listing(listing['id'], {'platform_statuses': ','.join(status_list)})
 
-            if listing_success:
-                success_count += 1
-            else:
-                fail_count += 1
+        return jsonify(results)
 
-            results.append({
-                'listing_id': listing_id,
-                'title': listing.get('title'),
-                'success': listing_success,
-                'platforms': platform_results
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
+def generate_generic_csv(listings, platform_name):
+    """Generate a generic CSV for platforms without specific adapters"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_dir = Path('./data/csv_exports')
+    csv_dir.mkdir(parents=True, exist_ok=True)
+    filepath = csv_dir / f"{platform_name}_{timestamp}.csv"
+
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            'Title', 'Description', 'Price', 'Brand', 'Size',
+            'Color', 'Condition', 'Photo 1', 'Photo 2', 'Photo 3'
+        ])
+        writer.writeheader()
+
+        for listing in listings:
+            photos = listing.photos[:3] if listing.photos else []
+            writer.writerow({
+                'Title': listing.title,
+                'Description': listing.description,
+                'Price': f"${listing.price.amount:.2f}",
+                'Brand': listing.item_specifics.brand or '',
+                'Size': listing.item_specifics.size or '',
+                'Color': listing.item_specifics.color or '',
+                'Condition': listing.condition.value,
+                'Photo 1': photos[0].url if len(photos) > 0 else '',
+                'Photo 2': photos[1].url if len(photos) > 1 else '',
+                'Photo 3': photos[2].url if len(photos) > 2 else '',
             })
 
-        return jsonify({
-            'success': True,
-            'results': results,
-            'summary': {
-                'total': len(listing_ids),
-                'success': success_count,
-                'failed': fail_count
-            }
-        })
+    return str(filepath)
+
+
+@app.route('/api/download-csv/<filename>', methods=['GET'])
+@login_required
+def download_csv(filename):
+    """Download generated CSV file"""
+    try:
+        # Sanitize filename
+        safe_filename = secure_filename(filename)
+        filepath = Path('./data/csv_exports') / safe_filename
+
+        if not filepath.exists():
+            return jsonify({'error': 'File not found'}), 404
+
+        return send_file(
+            filepath,
+            as_attachment=True,
+            download_name=safe_filename,
+            mimetype='text/csv'
+        )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
