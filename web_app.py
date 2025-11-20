@@ -957,8 +957,22 @@ def edit_photo():
             # Remove data URL prefix
             image_data = image_data.split(',')[1]
 
-        image_bytes = base64.b64decode(image_data)
-        img = Image.open(BytesIO(image_bytes))
+        # Clean base64 string - remove whitespace and fix padding
+        image_data = image_data.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+
+        # Fix base64 padding if needed
+        missing_padding = len(image_data) % 4
+        if missing_padding:
+            image_data += '=' * (4 - missing_padding)
+
+        try:
+            image_bytes = base64.b64decode(image_data)
+            img = Image.open(BytesIO(image_bytes))
+        except Exception as decode_error:
+            print(f"Base64 decode error: {decode_error}")
+            print(f"Image data length: {len(image_data)}")
+            print(f"First 100 chars: {image_data[:100] if len(image_data) > 100 else image_data}")
+            return jsonify({'error': f'Invalid image data: {str(decode_error)}'}), 400
 
         operation = data['operation']
 
