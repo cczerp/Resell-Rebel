@@ -151,7 +151,7 @@ class Database:
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 UNIQUE(user_id, platform)
             )
-        """)
+        """))
 
         # Collectibles database table
         cursor.execute(self._sql("""
