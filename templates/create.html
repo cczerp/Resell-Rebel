@@ -291,15 +291,38 @@ let currentEditingPhotoIndex = null;
 let currentEditingPhotoSrc = null;
 let originalPhotoSrc = null;
 
-function openPhotoEditor(photoIndex, photoSrc) {
+async function openPhotoEditor(photoIndex, photoSrc) {
     currentEditingPhotoIndex = photoIndex;
-    currentEditingPhotoSrc = photoSrc;
     originalPhotoSrc = photoSrc;
 
     const modal = document.getElementById('photoEditorModal');
     const img = document.getElementById('photoEditorImage');
 
-    img.src = photoSrc;
+    // Convert blob URL to base64 data URL
+    try {
+        if (photoSrc.startsWith('blob:')) {
+            // Fetch the blob and convert to base64
+            const response = await fetch(photoSrc);
+            const blob = await response.blob();
+
+            // Convert blob to base64 using FileReader
+            const reader = new FileReader();
+            reader.onloadend = function() {
+                currentEditingPhotoSrc = reader.result; // This is the base64 data URL
+                img.src = currentEditingPhotoSrc;
+            };
+            reader.readAsDataURL(blob);
+        } else {
+            // Already a data URL or regular URL
+            currentEditingPhotoSrc = photoSrc;
+            img.src = photoSrc;
+        }
+    } catch (error) {
+        console.error('Error converting image:', error);
+        currentEditingPhotoSrc = photoSrc;
+        img.src = photoSrc;
+    }
+
     modal.classList.add('show');
 
     // Destroy existing cropper if any
