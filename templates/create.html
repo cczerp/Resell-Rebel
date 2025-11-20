@@ -744,22 +744,32 @@ function showCardDetectionBanner(cardData) {
     banner.className = 'alert alert-success alert-dismissible fade show mt-3';
     banner.style.cssText = 'position: sticky; top: 10px; z-index: 1000; border: 3px solid #28a745; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);';
     banner.innerHTML = `
-        <div class="d-flex justify-content-between align-items-start">
-            <div>
-                <h5 class="alert-heading mb-2">
-                    <i class="fas fa-id-card"></i> <strong>TRADING CARD DETECTED!</strong>
-                </h5>
-                <p class="mb-2">
-                    <strong>${cardName}</strong><br>
-                    <small class="text-muted">${cardInfo}</small>
-                </p>
-                ${valueText ? `<p class="mb-2">${valueText}</p>` : ''}
-                <small class="text-muted">Confidence: ${confidence}</small>
-            </div>
-            <div>
-                <button type="button" class="btn btn-success btn-lg pulse-glow" onclick="addToCardCollection()">
-                    <i class="fas fa-plus-circle"></i> Add to My Collection
-                </button>
+        <div>
+            <h5 class="alert-heading mb-3">
+                <i class="fas fa-id-card"></i> <strong>TRADING CARD DETECTED!</strong>
+            </h5>
+            <div class="row">
+                <div class="col-md-7">
+                    <p class="mb-2">
+                        <strong>${cardName}</strong><br>
+                        <small class="text-muted">${cardInfo}</small>
+                    </p>
+                    ${valueText ? `<p class="mb-2">${valueText}</p>` : ''}
+                    <small class="text-muted">Confidence: ${confidence}</small>
+                </div>
+                <div class="col-md-5">
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-success btn-lg pulse-glow" onclick="storeCardOnly()">
+                            <i class="fas fa-box"></i> Store Only
+                        </button>
+                        <button type="button" class="btn btn-outline-success" onclick="storeAndList()">
+                            <i class="fas fa-plus-circle"></i> Store + Create Listing
+                        </button>
+                        <small class="text-muted text-center">
+                            Or just create a listing below without storing
+                        </small>
+                    </div>
+                </div>
             </div>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -832,7 +842,7 @@ function fillFormFromCardData(cardData) {
     }
 }
 
-async function addToCardCollection() {
+async function storeCardOnly() {
     if (!detectedCardData) {
         showAlert('No card data available', 'danger');
         return;
@@ -854,9 +864,44 @@ async function addToCardCollection() {
         const data = await response.json();
 
         if (data.success) {
-            showAlert('Card added to your collection! 🎉', 'success');
+            showAlert('Card stored in your collection! Redirecting...', 'success');
+            // Redirect to cards collection page after 1 second
+            setTimeout(() => window.location.href = '/cards', 1000);
+        } else {
+            showAlert(data.error || 'Failed to add card to collection', 'danger');
+            hideLoading();
+        }
+    } catch (error) {
+        showAlert('Failed to add card: ' + error, 'danger');
+        hideLoading();
+    }
+}
 
-            // Update the banner to show it's been added
+async function storeAndList() {
+    if (!detectedCardData) {
+        showAlert('No card data available', 'danger');
+        return;
+    }
+
+    showLoading();
+
+    try {
+        const response = await fetch('/api/cards/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                ai_result: detectedCardData,
+                photos: uploadedPhotos,
+                storage_location: document.getElementById('storage_location').value || null
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showAlert('Card added to collection! You can now create a listing below.', 'success');
+
+            // Update the banner to show it's been stored
             const banner = document.getElementById('cardDetectionBanner');
             if (banner) {
                 banner.classList.remove('alert-success');
@@ -865,9 +910,9 @@ async function addToCardCollection() {
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h5 class="alert-heading mb-0">
-                                <i class="fas fa-check-circle"></i> <strong>Card Added to Collection!</strong>
+                                <i class="fas fa-check-circle"></i> <strong>Card Stored!</strong>
                             </h5>
-                            <small class="text-muted">You can still create a listing if you want to sell it.</small>
+                            <small class="text-muted">Continue filling out the form below to create a listing.</small>
                         </div>
                         <a href="/cards" class="btn btn-info">
                             <i class="fas fa-box-open"></i> View Collection

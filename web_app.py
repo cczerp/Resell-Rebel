@@ -1125,7 +1125,7 @@ def save_draft():
                 permanent_photo_paths = existing_photos
 
             # Update listing in database
-            cursor = db.conn.cursor()
+            cursor = db._get_cursor()
             cursor.execute("""
                 UPDATE listings SET
                     title = ?,
@@ -2033,41 +2033,44 @@ def api_add_card():
         # Manual card entry
         else:
             from src.cards import CardCollectionManager, UnifiedCard
-            
+
             manager = CardCollectionManager()
-            
+
+            # Get manual entry data (could be nested or direct)
+            manual_data = data.get('manual_entry', data)
+
             # Create UnifiedCard from manual data
             card = UnifiedCard(
-                card_type=data.get('card_type', 'unknown'),
-                title=data.get('title', 'Unknown Card'),
+                card_type=manual_data.get('card_type', 'unknown'),
+                title=manual_data.get('title', 'Unknown Card'),
                 user_id=current_user.id,
-                card_number=data.get('card_number'),
-                quantity=data.get('quantity', 1),
-                organization_mode=data.get('organization_mode', 'by_set'),
-                
+                card_number=manual_data.get('card_number'),
+                quantity=manual_data.get('quantity', 1),
+                organization_mode=manual_data.get('organization_mode', 'by_set'),
+
                 # TCG fields
-                game_name=data.get('game_name'),
-                set_name=data.get('set_name'),
-                set_code=data.get('set_code'),
-                rarity=data.get('rarity'),
-                
+                game_name=manual_data.get('game_name'),
+                set_name=manual_data.get('set_name'),
+                set_code=manual_data.get('set_code'),
+                rarity=manual_data.get('rarity'),
+
                 # Sports fields
-                sport=data.get('sport'),
-                year=data.get('year'),
-                brand=data.get('brand'),
-                series=data.get('series'),
-                player_name=data.get('player_name'),
-                is_rookie_card=data.get('is_rookie_card', False),
-                
+                sport=manual_data.get('sport'),
+                year=manual_data.get('year'),
+                brand=manual_data.get('brand'),
+                series=manual_data.get('series'),
+                player_name=manual_data.get('player_name'),
+                is_rookie_card=manual_data.get('is_rookie_card', False),
+
                 # Grading
-                grading_company=data.get('grading_company'),
-                grading_score=data.get('grading_score'),
-                
+                grading_company=manual_data.get('grading_company'),
+                grading_score=manual_data.get('grading_score'),
+
                 # Value & location
-                estimated_value=data.get('estimated_value'),
-                storage_location=data.get('storage_location'),
-                photos=data.get('photos', []),
-                notes=data.get('notes'),
+                estimated_value=manual_data.get('estimated_value'),
+                storage_location=manual_data.get('storage_location'),
+                photos=manual_data.get('photos', []),
+                notes=manual_data.get('notes'),
             )
             
             card_id = manager.add_card(card)
