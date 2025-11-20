@@ -63,7 +63,8 @@ class Database:
             converted_sql = sql.replace('?', '%s') if self.is_postgres else sql
 
             # For PostgreSQL INSERT statements, add RETURNING id if not present
-            if self.is_postgres and 'INSERT' in converted_sql.upper() and 'RETURNING' not in converted_sql.upper():
+            # Only match statements that START with INSERT, not ones that contain the word elsewhere
+            if self.is_postgres and converted_sql.strip().upper().startswith('INSERT') and 'RETURNING' not in converted_sql.upper():
                 converted_sql = converted_sql.rstrip().rstrip(';') + ' RETURNING id'
 
             if params:
