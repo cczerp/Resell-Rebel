@@ -37,35 +37,7 @@ Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
 
 # Initialize database (PostgreSQL)
 db = get_db()
-
-# ============================================================================
-# CREATE DEFAULT ADMIN
-# ============================================================================
-
-def create_default_admin():
-    """Create default admin account (admin/admin) if no users exist"""
-    cursor = db._get_cursor()
-    cursor.execute("SELECT COUNT(*) as count FROM users")
-    result = cursor.fetchone()
-    # Handle PostgreSQL RealDictCursor
-    user_count = result['count'] if isinstance(result, dict) else result[0]
-
-    if user_count == 0:
-        print("\n" + "="*60)
-        print("No users found. Creating default admin account...")
-        print("Username: admin")
-        print("Password: admin")
-        print("IMPORTANT: Please change this password after first login!")
-        print("="*60 + "\n")
-
-        password_hash = generate_password_hash('admin')
-        cursor.execute("""
-            INSERT INTO users (username, email, password_hash, is_admin, is_active, email_verified)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, ('admin', 'admin@resellgenius.local', password_hash, True, True, True))
-        db.conn.commit()
-
-create_default_admin()
+# Admin user is created automatically by db.py on connection
 
 # Initialize notification manager (optional)
 notification_manager = None
