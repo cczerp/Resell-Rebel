@@ -58,8 +58,10 @@ db = get_db()
 def create_default_admin():
     """Create default admin account (admin/admin) if no users exist"""
     cursor = db._get_cursor()
-    cursor.execute("SELECT COUNT(*) FROM users")
-    user_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) as count FROM users")
+    result = cursor.fetchone()
+    # Handle both PostgreSQL (dict-like) and SQLite (tuple)
+    user_count = result['count'] if isinstance(result, dict) else result[0]
 
     if user_count == 0:
         print("\n" + "="*60)
