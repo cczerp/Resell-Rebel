@@ -33,6 +33,9 @@ class Database:
 
         # Create tables
         self._create_tables()
+        
+        # Seed initial data
+        self._seed_data()
 
     def _get_cursor(self):
         """Get PostgreSQL cursor with RealDictCursor for dict-like row access"""
@@ -1817,6 +1820,36 @@ class Database:
             'card_bins': card_bins,
             'total_items': total_items
         }
+
+    def _seed_data(self):
+        """Seed initial data - creates admin user if it doesn't exist"""
+        from werkzeug.security import generate_password_hash
+        
+        cursor = self._get_cursor()
+        
+        # Check if admin user already exists
+        cursor.execute("SELECT id FROM users WHERE username = %s", ("lyakGodzilla",))
+        if cursor.fetchone():
+            return  # Admin already exists, skip
+        
+        # Create admin user
+        admin_password_hash = generate_password_hash("<3love")
+        
+        cursor.execute("""
+            INSERT INTO users (
+                username, email, password_hash, is_admin, is_active, email_verified
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+            "lyakGodzilla",
+            "little.cee.zers@gmail.com",
+            admin_password_hash,
+            True,  # is_admin
+            True,  # is_active
+            True   # email_verified
+        ))
+        
+        self.conn.commit()
+        print("✅ Admin user created successfully")
 
     def close(self):
         """Close database connection"""
