@@ -507,7 +507,7 @@ def drafts():
 @login_required
 def listings():
     """View active listings"""
-    cursor = db.conn.cursor()
+    cursor = db._get_cursor()
     cursor.execute("""
         SELECT l.*, GROUP_CONCAT(pl.platform || ':' || pl.status) as platform_statuses
         FROM listings l
@@ -812,7 +812,7 @@ def admin_user_detail(user_id):
         return redirect(url_for('admin_users'))
 
     # Get user's listings
-    cursor = db.conn.cursor()
+    cursor = db._get_cursor()
     cursor.execute("SELECT * FROM listings WHERE user_id = ? ORDER BY created_at DESC LIMIT 50", (user_id,))
     listings = [dict(row) for row in cursor.fetchall()]
 
@@ -1345,7 +1345,7 @@ def import_csv():
 
             if listing_id and storage_location:
                 # Update storage location (only for user's own listings)
-                cursor = db.conn.cursor()
+                cursor = db._get_cursor()
                 cursor.execute("""
                     UPDATE listings
                     SET storage_location = ?
@@ -1626,7 +1626,7 @@ def mark_sold():
         current_quantity = listing.get('quantity', 1)
         remaining_quantity = max(0, current_quantity - quantity_sold)
 
-        cursor = db.conn.cursor()
+        cursor = db._get_cursor()
         if remaining_quantity == 0:
             # Mark as sold
             cursor.execute("""
@@ -1748,7 +1748,7 @@ def post_draft(listing_id):
             return jsonify({'error': 'Unauthorized'}), 403
 
         # Update status to active
-        cursor = db.conn.cursor()
+        cursor = db._get_cursor()
         cursor.execute("""
             UPDATE listings
             SET status = 'active',
