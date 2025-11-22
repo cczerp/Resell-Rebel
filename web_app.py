@@ -162,7 +162,9 @@ def create_listing():
 @login_required
 def drafts():
     """Drafts page"""
-    return render_template('drafts.html')
+    # Fetch all drafts for current user
+    drafts_list = db.get_drafts(user_id=current_user.id, limit=100)
+    return render_template('drafts.html', drafts=drafts_list)
 
 @app.route('/listings')
 @login_required
