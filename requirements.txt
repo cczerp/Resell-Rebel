@@ -23,6 +23,7 @@ flask>=3.0.0
 flask-login>=0.6.3
 werkzeug>=3.0.0
 gunicorn>=21.2.0  # Production WSGI server for Render deployment
+gevent>=23.9.1  # Async worker for better upload handling
 
 # Database
 psycopg2-binary>=2.9.9  # PostgreSQL adapter
