@@ -11,6 +11,8 @@ import json
 import os
 import uuid
 from werkzeug.utils import secure_filename
+from PIL import Image
+import io
 
 
 # Create blueprint
@@ -57,10 +59,50 @@ def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def compress_image(image_file, max_size_mb=2, quality=85):
+    """Compress image to reduce file size"""
+    try:
+        # Read image
+        img = Image.open(image_file)
+
+        # Convert RGBA to RGB if needed
+        if img.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
+
+        # Resize if too large (max 2048px on longest side)
+        max_dimension = 2048
+        if max(img.size) > max_dimension:
+            ratio = max_dimension / max(img.size)
+            new_size = tuple(int(dim * ratio) for dim in img.size)
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+        # Save compressed image to bytes
+        output = io.BytesIO()
+        img.save(output, format='JPEG', quality=quality, optimize=True)
+        output.seek(0)
+
+        # If still too large, reduce quality
+        if len(output.getvalue()) > max_size_mb * 1024 * 1024 and quality > 60:
+            output = io.BytesIO()
+            img.save(output, format='JPEG', quality=60, optimize=True)
+            output.seek(0)
+
+        return output, 'jpg'
+    except Exception as e:
+        print(f"Compression error: {e}")
+        # Return original if compression fails
+        image_file.seek(0)
+        return image_file, image_file.filename.rsplit('.', 1)[1].lower()
+
+
 @main_bp.route("/api/upload-photos", methods=["POST"])
 @login_required
 def api_upload_photos():
-    """Handle photo uploads for listings"""
+    """Handle photo uploads for listings with compression"""
     try:
         if 'photos' not in request.files:
             return jsonify({"error": "No photos provided"}), 400
@@ -76,14 +118,18 @@ def api_upload_photos():
         uploaded_paths = []
         for file in files:
             if file and allowed_file(file.filename):
+                # Compress image before saving
+                compressed_file, ext = compress_image(file)
+
                 # Generate unique filename
-                ext = file.filename.rsplit('.', 1)[1].lower()
                 filename = f"{uuid.uuid4().hex}.{ext}"
                 filepath = upload_dir / filename
 
-                # Save file
-                file.save(str(filepath))
-                # Return web-accessible path instead of filesystem path
+                # Save compressed file
+                with open(filepath, 'wb') as f:
+                    f.write(compressed_file.read())
+
+                # Return web-accessible path
                 uploaded_paths.append(f"/uploads/{filename}")
 
         if not uploaded_paths:
@@ -96,6 +142,7 @@ def api_upload_photos():
         })
 
     except Exception as e:
+        print(f"Upload error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
