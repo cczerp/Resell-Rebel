@@ -6,7 +6,7 @@ services:
     plan: free
     branch: claude/investigate-landing-page-01Ncg5Bwtm44WFZjQ62UTdp8
     buildCommand: pip install --upgrade pip && pip install gunicorn && pip install -r requirements.txt
-    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --worker-class gevent
+    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --threads 4
     maxUploadSizeMB: 50
     disk:
       name: uploads
