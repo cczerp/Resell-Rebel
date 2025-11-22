@@ -54,11 +54,24 @@ class Database:
             is_supabase_pooler = 'pooler.supabase.com' in self.database_url
 
             if is_supabase_pooler:
-                # Supabase pooler - use minimal connection parameters
+                # Supabase pooler - add sslmode and disable prepared statements
+                # Transaction mode pooling requires these settings
+                connection_params = self.database_url
+
+                # Add sslmode=require if not present
+                if '?' not in connection_params:
+                    connection_params += '?sslmode=require'
+                elif 'sslmode=' not in connection_params:
+                    connection_params += '&sslmode=require'
+
                 self.conn = psycopg2.connect(
-                    self.database_url,
+                    connection_params,
                     connect_timeout=10
                 )
+                # Disable prepared statements for transaction pooling
+                cursor = self.conn.cursor()
+                cursor.execute("SET statement_timeout = '30s'")
+                cursor.close()
             else:
                 # Direct connection - use keepalives
                 self.conn = psycopg2.connect(
