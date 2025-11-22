@@ -54,8 +54,7 @@ class Database:
             is_supabase_pooler = 'pooler.supabase.com' in self.database_url
 
             if is_supabase_pooler:
-                # Supabase pooler - add sslmode and disable prepared statements
-                # Transaction mode pooling requires these settings
+                # Supabase pooler - add sslmode for transaction pooling
                 connection_params = self.database_url
 
                 # Add sslmode=require if not present
@@ -68,10 +67,6 @@ class Database:
                     connection_params,
                     connect_timeout=10
                 )
-                # Disable prepared statements for transaction pooling
-                cursor = self.conn.cursor()
-                cursor.execute("SET statement_timeout = '30s'")
-                cursor.close()
             else:
                 # Direct connection - use keepalives
                 self.conn = psycopg2.connect(
@@ -83,6 +78,7 @@ class Database:
                     keepalives_count=5
                 )
 
+            # Set autocommit BEFORE executing any SQL
             self.conn.autocommit = False
 
         except Exception as e:
