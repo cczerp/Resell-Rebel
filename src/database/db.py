@@ -1176,7 +1176,7 @@ class Database:
         return [dict(row) for row in cursor.fetchall()]
 
 
-        def add_to_public_collectibles(self, item_type: str, data: dict, scanned_by: int) -> Optional[int]:
+    def add_to_public_collectibles(self, item_type: str, data: dict, scanned_by: int) -> Optional[int]:
         """Add item to public collectibles database"""
         cursor = self._get_cursor()
         
@@ -2196,5 +2196,6 @@ def get_db() -> Database:
     if _db_instance is None:
         _db_instance = Database()
     return _db_instance
+
 
 
