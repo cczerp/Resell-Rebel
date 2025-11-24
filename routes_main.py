@@ -252,11 +252,27 @@ def api_analyze_card():
         photos = [Photo(local_path=p) for p in paths]
         result = analyze_card(photos)
 
+        # Check for API key errors
         if result.get("error"):
+            error_msg = result.get("error", "Unknown error")
+            if "API" in error_msg or "api_key" in error_msg.lower():
+                return jsonify({
+                    "error": "AI service not configured. Please check your GEMINI_API_KEY environment variable.",
+                    "details": error_msg
+                }), 503
             return jsonify(result), 500
 
         return jsonify({"success": True, "card_data": result})
 
+    except ValueError as e:
+        # Catch API key not set errors
+        error_msg = str(e)
+        if "API_KEY" in error_msg:
+            return jsonify({
+                "error": "AI service not configured. Please set GEMINI_API_KEY environment variable.",
+                "details": error_msg
+            }), 503
+        return jsonify({"error": error_msg}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -287,8 +303,30 @@ def api_analyze():
         try:
             classifier = GeminiClassifier()
             analysis = classifier.analyze_item(photos)
+        except ValueError as e:
+            # Handle missing API key
+            error_msg = str(e)
+            if "API_KEY" in error_msg:
+                return jsonify({
+                    "error": "AI service not configured. Please set GEMINI_API_KEY environment variable.",
+                    "details": error_msg
+                }), 503
+            return jsonify({"error": f"Analyzer init failed: {e}"}), 500
         except Exception as e:
             return jsonify({"error": f"Analyzer init failed: {e}"}), 500
+
+        # Check if analysis returned an error
+        if analysis.get("error"):
+            error_msg = analysis.get("error", "Unknown error")
+            # Check for rate limit errors
+            if analysis.get("error_type") == "rate_limit":
+                return jsonify({
+                    "success": False,
+                    "error": error_msg,
+                    "retry_after": analysis.get("retry_after", 60)
+                }), 429
+            # Other errors
+            return jsonify({"success": False, "error": error_msg}), 500
 
         # If it's marked collectible, run deep Claude analysis (non-blocking if it fails)
         collectible_analysis = None
