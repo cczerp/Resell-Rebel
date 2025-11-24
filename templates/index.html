@@ -209,7 +209,13 @@
                 <img src="/static/resell-rebel-icon.svg" alt="Resell Rebel Brain Logo" style="width: 100px; height: 100px;">
             </div>
             <h1 class="display-2 fw-bold mb-3" style="color: white;">Resell Rebel</h1>
-            <p class="display-6 mb-2" style="color: rgba(255,255,255,0.95);">Welcome Back, <strong>{{ current_user.username }}</strong>!</p>
+            <p class="display-6 mb-2" style="color: rgba(255,255,255,0.95);">
+                {% if current_user and current_user.is_authenticated and current_user.username %}
+                    Welcome Back, <strong>{{ current_user.username }}</strong>!
+                {% else %}
+                    Welcome!
+                {% endif %}
+            </p>
             <p class="hero-subtitle mb-1">Ready to make bold moves today?</p>
             <div class="hero-badges mt-3">
                 <span class="badge-pill"><i class="fas fa-rocket me-1"></i> Let's make some sales</span>
