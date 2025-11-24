@@ -10,10 +10,10 @@
     <div class="container text-center py-5">
         <div class="hero-content">
             <div class="hero-icon mb-4">
-                <img src="/static/resell-rebel-icon.svg" alt="Resell Rebel Brain Logo" style="width: 120px; height: 120px;">
+                <img src="/static/resell-rebel-logo.png" onerror="this.onerror=null; this.src='/static/resell-rebel-icon.svg';" alt="Resell Rebel Logo" style="width: 180px; height: auto;">
             </div>
-            <h1 class="display-2 fw-bold mb-3">Resell Rebel</h1>
-            <p class="hero-tagline mb-2">Smart selling, bold moves.</p>
+            <h1 class="display-2 fw-bold mb-3" style="background: linear-gradient(to right, #fff, #f0e6ff, #fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Resell Rebel</h1>
+            <p class="hero-tagline mb-2">Sell smarter, not harder.</p>
             <p class="hero-subtitle mb-4">AI handles the listings. You handle the profits.</p>
 
             <div class="hero-cta mt-4">
@@ -206,9 +206,9 @@
     <div class="container text-center py-4">
         <div class="hero-content">
             <div class="hero-icon mb-3">
-                <img src="/static/resell-rebel-icon.svg" alt="Resell Rebel Brain Logo" style="width: 100px; height: 100px;">
+                <img src="/static/resell-rebel-logo.png" onerror="this.onerror=null; this.src='/static/resell-rebel-icon.svg';" alt="Resell Rebel Logo" style="width: 150px; height: auto;">
             </div>
-            <h1 class="display-2 fw-bold mb-3" style="color: white;">Resell Rebel</h1>
+            <h1 class="display-2 fw-bold mb-3" style="background: linear-gradient(to right, #fff, #f0e6ff, #fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Resell Rebel</h1>
             <p class="display-6 mb-2" style="color: rgba(255,255,255,0.95);">
                 {% if current_user and current_user.is_authenticated and current_user.username %}
                     Welcome Back, <strong>{{ current_user.username }}</strong>!
@@ -229,14 +229,14 @@
     <div class="row g-4">
         <!-- Create Listing - Primary Action -->
         <div class="col-12">
-            <div class="feature-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 50px 40px;">
+            <div class="feature-card" style="background: linear-gradient(135deg, #6D28D9 0%, #7C3AED 30%, #A855F7 60%, #C026D3 100%); color: white; padding: 50px 40px;">
                 <div class="text-center">
                     <div class="hero-icon mb-3">
                         <i class="fas fa-camera fa-5x" style="color: white;"></i>
                     </div>
                     <h3 class="fw-bold mb-3">Create New Listing</h3>
                     <p class="mb-4" style="font-size: 1.1rem; opacity: 0.95;">Snap photos and let AI handle the magic ✨</p>
-                    <a href="{{ url_for('listings') }}" class="btn btn-light btn-lg px-5 pulse-glow" style="color: #667eea; font-weight: 700;">
+                    <a href="{{ url_for('listings') }}" class="btn btn-light btn-lg px-5 pulse-glow" style="color: #7C3AED; font-weight: 700;">
                         <i class="fas fa-plus-circle me-2"></i> Start Listing Now
                     </a>
                 </div>
@@ -305,9 +305,9 @@
             <div class="col-6 col-md-3">
                 <a href="{{ url_for('cards.cards_collection') }}" class="text-decoration-none">
                     <div class="step-card" style="cursor: pointer; padding: 30px 20px;">
-                        <div class="step-icon">🎴</div>
+                        <div class="step-icon">🃏</div>
                         <h6 class="step-title" style="font-size: 1rem;">Cards</h6>
-                        <p class="step-text" style="font-size: 0.85rem;">Collection manager</p>
+                        <p class="step-text" style="font-size: 0.85rem;">Trading cards</p>
                     </div>
                 </a>
             </div>
