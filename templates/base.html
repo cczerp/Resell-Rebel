@@ -22,14 +22,15 @@
 
     <style>
         :root {
-            --primary: #6366F1;
-            --primary-dark: #4F46E5;
-            --secondary: #8B5CF6;
-            --accent: #EC4899;
+            --primary: #7C3AED;
+            --primary-dark: #6D28D9;
+            --secondary: #A855F7;
+            --accent: #C026D3;
             --success: #10B981;
             --danger: #EF4444;
             --warning: #F59E0B;
-            --gradient: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+            --gradient: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C026D3 100%);
+            --gradient-dark: linear-gradient(135deg, #6D28D9 0%, #7C3AED 50%, #A855F7 100%);
         }
 
         .logo {
@@ -87,19 +88,19 @@
         }
 
         .bottom-nav .nav-link:hover {
-            background: rgba(102, 126, 234, 0.08);
+            background: rgba(124, 58, 237, 0.08);
             transform: translateY(-2px);
         }
 
         .bottom-nav .nav-link.active {
             color: white;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C026D3 100%);
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.45);
         }
 
         .bottom-nav .nav-link.active:hover {
             transform: translateY(-3px);
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.45);
+            box-shadow: 0 6px 16px rgba(124, 58, 237, 0.55);
         }
 
         .bottom-nav .nav-link i {
@@ -268,7 +269,7 @@
 
         /* Hero Section - Full Width Gradient */
         .hero-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #F093FB 100%);
+            background: linear-gradient(135deg, #6D28D9 0%, #7C3AED 30%, #A855F7 60%, #C026D3 100%);
             color: white;
             border-radius: 0 0 30px 30px;
             margin-top: -24px;
@@ -338,7 +339,7 @@
 
         .btn-hero {
             background: white;
-            color: #667eea;
+            color: #7C3AED;
             font-weight: 700;
             padding: 14px 32px;
             border-radius: 30px;
@@ -351,7 +352,7 @@
             transform: translateY(-3px);
             box-shadow: 0 12px 30px rgba(0,0,0,0.3);
             background: #f8f9ff;
-            color: #667eea;
+            color: #7C3AED;
         }
 
         .btn-hero-outline {
@@ -366,7 +367,7 @@
 
         .btn-hero-outline:hover {
             background: white;
-            color: #667eea;
+            color: #7C3AED;
             transform: translateY(-3px);
         }
 
@@ -380,7 +381,7 @@
                 box-shadow: 0 8px 25px rgba(0,0,0,0.2), 0 0 0 0 rgba(255,255,255,0.7);
             }
             50% {
-                box-shadow: 0 8px 35px rgba(102, 126, 234, 0.6), 0 0 0 10px rgba(255,255,255,0);
+                box-shadow: 0 8px 35px rgba(124, 58, 237, 0.6), 0 0 0 10px rgba(255,255,255,0);
             }
         }
 
@@ -419,7 +420,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C026D3 100%);
             opacity: 0;
             transition: opacity 0.4s ease;
             z-index: 0;
@@ -436,8 +437,8 @@
 
         .feature-card:hover {
             transform: translateY(-12px) scale(1.02);
-            box-shadow: 0 20px 50px rgba(102, 126, 234, 0.35);
-            border-color: #667eea;
+            box-shadow: 0 20px 50px rgba(124, 58, 237, 0.35);
+            border-color: #7C3AED;
         }
 
         .feature-card:hover::before {
@@ -445,7 +446,7 @@
         }
 
         .feature-icon {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C026D3 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -455,7 +456,7 @@
 
         .feature-card:hover .feature-icon {
             transform: scale(1.15) rotate(5deg);
-            filter: drop-shadow(0 8px 20px rgba(102, 126, 234, 0.5));
+            filter: drop-shadow(0 8px 20px rgba(124, 58, 237, 0.5));
         }
 
         .feature-icon.warning {
@@ -506,7 +507,7 @@
         }
 
         .section-dark {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #F093FB 100%);
+            background: linear-gradient(135deg, #6D28D9 0%, #7C3AED 30%, #A855F7 60%, #C026D3 100%);
             color: white;
             margin-left: calc(-50vw + 50%);
             margin-right: calc(-50vw + 50%);
@@ -558,15 +559,15 @@
 
         .step-card:hover {
             transform: translateY(-8px) scale(1.03);
-            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.25);
-            border-color: rgba(102, 126, 234, 0.3);
+            box-shadow: 0 15px 40px rgba(124, 58, 237, 0.25);
+            border-color: rgba(124, 58, 237, 0.3);
         }
 
         .step-number {
             position: absolute;
             top: 15px;
             left: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C026D3 100%);
             color: white;
             width: 45px;
             height: 45px;
@@ -576,13 +577,13 @@
             justify-content: center;
             font-weight: 800;
             font-size: 1.2rem;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);
             transition: all 0.3s ease;
         }
 
         .step-card:hover .step-number {
             transform: scale(1.1) rotate(10deg);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+            box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6);
         }
 
         .step-icon {
@@ -610,21 +611,21 @@
 
         /* Why Section */
         .why-card {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
             border-radius: 16px;
             padding: 30px;
             margin-bottom: 20px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #7C3AED;
             transition: all 0.3s ease;
         }
 
         .why-card:hover {
             transform: translateX(8px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.15);
+            box-shadow: 0 5px 20px rgba(124, 58, 237, 0.15);
         }
 
         .why-card h5 {
-            color: #667eea;
+            color: #7C3AED;
             font-weight: 700;
             margin-bottom: 10px;
         }
@@ -674,7 +675,7 @@
 
         .tip-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
+            box-shadow: 0 8px 20px rgba(124, 58, 237, 0.15);
         }
 
         .tip-icon {
@@ -720,7 +721,7 @@
             top: 0;
             bottom: 0;
             width: 5px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C026D3 100%);
             transform: scaleY(0);
             transition: transform 0.3s ease;
         }
@@ -731,8 +732,8 @@
 
         .benefit-item:hover {
             transform: translateX(10px) scale(1.02);
-            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.2);
-            border-color: rgba(102, 126, 234, 0.3);
+            box-shadow: 0 8px 30px rgba(124, 58, 237, 0.2);
+            border-color: rgba(124, 58, 237, 0.3);
         }
 
         .benefit-icon {
@@ -810,13 +811,13 @@
             border-radius: 20px;
             overflow: hidden;
             background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
-            border: 2px solid rgba(102, 126, 234, 0.1);
+            border: 2px solid rgba(124, 58, 237, 0.1);
             transition: all 0.3s ease;
         }
 
         .storage-tips-card:hover {
-            box-shadow: 0 12px 35px rgba(102, 126, 234, 0.2);
-            border-color: rgba(102, 126, 234, 0.3);
+            box-shadow: 0 12px 35px rgba(124, 58, 237, 0.2);
+            border-color: rgba(124, 58, 237, 0.3);
         }
 
         .storage-badges {
@@ -826,20 +827,20 @@
         }
 
         .storage-badge {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 50%, #C026D3 100%);
             color: white;
             padding: 12px 24px;
             border-radius: 25px;
             font-weight: 600;
             display: inline-block;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             font-size: 1.1rem;
         }
 
         .storage-badge:hover {
             transform: translateY(-5px) scale(1.05);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+            box-shadow: 0 8px 25px rgba(124, 58, 237, 0.5);
         }
 
         .tip-icon i {
@@ -1003,7 +1004,7 @@
 
         <div class="nav-item">
             <a href="{{ url_for('cards.cards_collection') }}" class="nav-link {% if request.endpoint == 'cards.cards_collection' %}active{% endif %}">
-                <i class="fas fa-id-card"></i>
+                <i class="fas fa-layer-group"></i>
                 <span>Cards</span>
             </a>
         </div>
