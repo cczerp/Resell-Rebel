@@ -252,11 +252,27 @@ def api_analyze_card():
         photos = [Photo(local_path=p) for p in paths]
         result = analyze_card(photos)
 
+        # Check for API key errors
         if result.get("error"):
+            error_msg = result.get("error", "Unknown error")
+            if "API" in error_msg or "api_key" in error_msg.lower():
+                return jsonify({
+                    "error": "AI service not configured. Please check your GEMINI_API_KEY environment variable.",
+                    "details": error_msg
+                }), 503
             return jsonify(result), 500
 
         return jsonify({"success": True, "card_data": result})
 
+    except ValueError as e:
+        # Catch API key not set errors
+        error_msg = str(e)
+        if "API_KEY" in error_msg:
+            return jsonify({
+                "error": "AI service not configured. Please set GEMINI_API_KEY environment variable.",
+                "details": error_msg
+            }), 503
+        return jsonify({"error": error_msg}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -287,8 +303,30 @@ def api_analyze():
         try:
             classifier = GeminiClassifier()
             analysis = classifier.analyze_item(photos)
+        except ValueError as e:
+            # Handle missing API key
+            error_msg = str(e)
+            if "API_KEY" in error_msg:
+                return jsonify({
+                    "error": "AI service not configured. Please set GEMINI_API_KEY environment variable.",
+                    "details": error_msg
+                }), 503
+            return jsonify({"error": f"Analyzer init failed: {e}"}), 500
         except Exception as e:
             return jsonify({"error": f"Analyzer init failed: {e}"}), 500
+
+        # Check if analysis returned an error
+        if analysis.get("error"):
+            error_msg = analysis.get("error", "Unknown error")
+            # Check for rate limit errors
+            if analysis.get("error_type") == "rate_limit":
+                return jsonify({
+                    "success": False,
+                    "error": error_msg,
+                    "retry_after": analysis.get("retry_after", 60)
+                }), 429
+            # Other errors
+            return jsonify({"success": False, "error": error_msg}), 500
 
         # If it's marked collectible, run deep Claude analysis (non-blocking if it fails)
         collectible_analysis = None
@@ -307,6 +345,165 @@ def api_analyze():
         }
 
         return jsonify(response)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------------------------------------------------
+# UPLOAD PHOTOS
+# -------------------------------------------------------------------------
+
+@main_bp.route('/api/upload-photos', methods=['POST'])
+def api_upload_photos():
+    """Upload photos for a listing"""
+    try:
+        import uuid
+        from pathlib import Path
+        from werkzeug.utils import secure_filename
+
+        if 'photos' not in request.files:
+            return jsonify({"error": "No photos provided"}), 400
+
+        files = request.files.getlist('photos')
+        if not files or len(files) == 0:
+            return jsonify({"error": "No photos provided"}), 400
+
+        # Create unique directory for this upload
+        upload_uuid = str(uuid.uuid4())
+        upload_dir = Path('data/draft_photos') / upload_uuid
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        saved_paths = []
+        for file in files:
+            if file and file.filename:
+                filename = secure_filename(file.filename)
+                # Add timestamp to prevent collisions
+                from datetime import datetime
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{timestamp}_{filename}"
+
+                filepath = upload_dir / filename
+                file.save(str(filepath))
+
+                # Return relative path for database storage
+                relative_path = f"data/draft_photos/{upload_uuid}/{filename}"
+                saved_paths.append(relative_path)
+
+        return jsonify({
+            "success": True,
+            "paths": saved_paths,
+            "count": len(saved_paths)
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------------------------------------------------
+# EDIT PHOTO
+# -------------------------------------------------------------------------
+
+@main_bp.route('/api/edit-photo', methods=['POST'])
+def api_edit_photo():
+    """Edit photo (crop, remove background, resize)"""
+    try:
+        import base64
+        import io
+        from PIL import Image
+        from pathlib import Path
+        import uuid
+        from datetime import datetime
+
+        data = request.get_json()
+        image_data = data.get('image')
+        operation = data.get('operation')
+
+        if not image_data or not operation:
+            return jsonify({"error": "Missing image data or operation"}), 400
+
+        # Parse base64 image
+        if image_data.startswith('data:image'):
+            image_data = image_data.split(',')[1]
+
+        img_bytes = base64.b64decode(image_data)
+        img = Image.open(io.BytesIO(img_bytes))
+
+        # Perform operation
+        if operation == 'crop':
+            crop_data = data.get('crop', {})
+            x = crop_data.get('x', 0)
+            y = crop_data.get('y', 0)
+            width = crop_data.get('width', img.width)
+            height = crop_data.get('height', img.height)
+
+            img = img.crop((x, y, x + width, y + height))
+
+        elif operation == 'resize':
+            new_width = int(data.get('width', img.width))
+            new_height = int(data.get('height', img.height))
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        elif operation == 'remove-bg':
+            try:
+                from rembg import remove
+                img_bytes_io = io.BytesIO()
+                img.save(img_bytes_io, format='PNG')
+                img_bytes_io.seek(0)
+                output = remove(img_bytes_io.read())
+                img = Image.open(io.BytesIO(output))
+            except ImportError:
+                return jsonify({"error": "Background removal not available (rembg not installed)"}), 501
+            except Exception as e:
+                return jsonify({"error": f"Background removal failed: {str(e)}"}), 500
+
+        # Save edited image
+        upload_dir = Path('data/draft_photos') / 'edited'
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"edited_{timestamp}_{uuid.uuid4().hex[:8]}.png"
+        filepath = upload_dir / filename
+
+        img.save(str(filepath), 'PNG')
+
+        # Convert to base64 for preview
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        img_base64 = base64.b64encode(buffer.read()).decode()
+
+        return jsonify({
+            "success": True,
+            "image": f"data:image/png;base64,{img_base64}",
+            "filepath": f"data/draft_photos/edited/{filename}"
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------------------------------------------------
+# GET DRAFT
+# -------------------------------------------------------------------------
+
+@main_bp.route('/api/get-draft/<int:draft_id>', methods=['GET'])
+@login_required
+def api_get_draft(draft_id):
+    """Get draft details for editing"""
+    try:
+        listing = db.get_listing(draft_id)
+
+        if not listing:
+            return jsonify({"error": "Draft not found"}), 404
+
+        if listing['user_id'] != current_user.id:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        return jsonify({
+            "success": True,
+            "listing": listing
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
