@@ -36,6 +36,29 @@
             --gradient-dark: linear-gradient(135deg, #4C1D95 0%, #5B21B6 50%, #7C3AED 100%);
             --gradient-hero: linear-gradient(135deg, #0A0A0A 0%, #4C1D95 25%, #5B21B6 50%, #991B1B 100%);
             --gradient-red-purple: linear-gradient(135deg, #991B1B 0%, #5B21B6 50%, #A21CAF 100%);
+
+            /* Light mode colors */
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-tertiary: #f9fafb;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --border-color: rgba(0,0,0,0.1);
+            --card-bg: #ffffff;
+            --card-shadow: rgba(0,0,0,0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #0f0f0f;
+            --bg-tertiary: #2d2d2d;
+            --text-primary: #e5e5e5;
+            --text-secondary: #a3a3a3;
+            --text-tertiary: #737373;
+            --border-color: rgba(255,255,255,0.1);
+            --card-bg: #262626;
+            --card-shadow: rgba(0,0,0,0.5);
         }
 
         .logo {
@@ -54,7 +77,9 @@
 
         body {
             padding-bottom: 80px; /* Space for bottom nav */
-            background: #f5f5f5;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .bottom-nav {
@@ -62,13 +87,14 @@
             bottom: 0;
             left: 0;
             right: 0;
-            background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.98) 100%);
+            background: var(--card-bg);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(0,0,0,0.05);
+            border-top: 1px solid var(--border-color);
             padding: 12px 8px 18px 8px;
             z-index: 1000;
-            box-shadow: 0 -5px 20px rgba(0,0,0,0.08);
+            box-shadow: 0 -5px 20px var(--card-shadow);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         .bottom-nav .nav-item {
@@ -174,9 +200,63 @@
         }
 
         .card {
-            border: none;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 4px var(--card-shadow);
             margin-bottom: 15px;
+            background: var(--card-bg);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .card-header {
+            background: var(--bg-tertiary) !important;
+            color: var(--text-primary) !important;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-body {
+            background: var(--card-bg);
+        }
+
+        .form-control, .form-select {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
+        .form-control:focus, .form-select:focus {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border-color: var(--primary);
+        }
+
+        /* Dark mode toggle button */
+        .theme-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 9999;
+            background: var(--card-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px var(--card-shadow);
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1) rotate(15deg);
+            box-shadow: 0 6px 20px var(--card-shadow);
+        }
+
+        .theme-toggle i {
+            font-size: 20px;
+            color: var(--primary);
         }
 
         .photo-preview {
@@ -913,6 +993,11 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- Dark Mode Toggle -->
+    <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
+        <i class="fas fa-moon"></i>
+    </button>
+
     <!-- Loading Spinner -->
     <div class="loading" id="loading">
         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
@@ -1059,6 +1144,37 @@
 {% endif %}
 
     <script>
+        // Dark Mode Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const htmlElement = document.documentElement;
+        const themeIcon = themeToggle.querySelector('i');
+
+        // Check for saved theme preference or default to light mode
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        htmlElement.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = htmlElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+            htmlElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.classList.remove('fa-moon');
+                themeIcon.classList.add('fa-sun');
+                themeToggle.title = 'Switch to light mode';
+            } else {
+                themeIcon.classList.remove('fa-sun');
+                themeIcon.classList.add('fa-moon');
+                themeToggle.title = 'Switch to dark mode';
+            }
+        }
+
         // Loading spinner functions
         function showLoading() {
             document.getElementById('loading').style.display = 'block';

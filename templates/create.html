@@ -37,6 +37,9 @@
             <button type="button" class="btn btn-secondary mt-2" id="analyzeBtn" style="display:none;">
                 <i class="fas fa-magic"></i> Analyze with AI
             </button>
+            <button type="button" class="btn btn-outline-warning mt-2 ms-2" id="enhancedAnalyzerBtn" disabled title="Scan a collectible or card to enable">
+                <i class="fas fa-gem"></i> Enhanced Analyzer (Collectibles Only)
+            </button>
         </div>
     </div>
 
@@ -583,6 +586,7 @@ function updatePhotoAfterEdit(newImageData, newFilepath) {
 // ========================================
 // AI Analysis
 let detectedCardData = null; // Store card data if detected
+let enhancedAnalysisData = null; // Store enhanced collectible analysis
 
 document.getElementById('analyzeBtn').addEventListener('click', async function() {
     showLoading();
@@ -604,11 +608,23 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
             // Store card data for later
             detectedCardData = cardData.card_data;
 
+            // Store enhanced analysis if available
+            if (cardData.collectible_analysis) {
+                enhancedAnalysisData = cardData.collectible_analysis;
+            }
+
             // Show card detection banner
             showCardDetectionBanner(cardData.card_data);
 
             // Fill form with card data
             fillFormFromCardData(cardData.card_data);
+
+            // Enable enhanced analyzer button
+            const enhancedBtn = document.getElementById('enhancedAnalyzerBtn');
+            enhancedBtn.disabled = false;
+            enhancedBtn.classList.remove('btn-outline-warning');
+            enhancedBtn.classList.add('btn-warning');
+            enhancedBtn.title = 'Click for detailed card analysis';
 
             showAlert('Card detected and analyzed!', 'success');
         } else {
@@ -623,6 +639,11 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
 
             if (data.success) {
                 const analysis = data.analysis;
+
+                // Store enhanced analysis if available
+                if (data.collectible_analysis) {
+                    enhancedAnalysisData = data.collectible_analysis;
+                }
 
                 // Fill form
                 if (analysis.suggested_title) document.getElementById('title').value = analysis.suggested_title;
@@ -667,6 +688,13 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
 
                     // Auto-set item type to collectible
                     document.getElementById('item_type').value = 'collectible';
+
+                    // Enable enhanced analyzer button
+                    const enhancedBtn = document.getElementById('enhancedAnalyzerBtn');
+                    enhancedBtn.disabled = false;
+                    enhancedBtn.classList.remove('btn-outline-warning');
+                    enhancedBtn.classList.add('btn-warning');
+                    enhancedBtn.title = 'Click for detailed collectible analysis';
                 }
 
                 // Show market analysis (sell-through rate)
@@ -713,6 +741,136 @@ function getDemandEmoji(demand) {
     if (demand === 'Low') return '🐌';
     return '📈';
 }
+
+// ========================================
+// ENHANCED ANALYZER FOR COLLECTIBLES
+// ========================================
+
+document.getElementById('enhancedAnalyzerBtn').addEventListener('click', function() {
+    if (!enhancedAnalysisData) {
+        showAlert('No enhanced analysis data available', 'warning');
+        return;
+    }
+
+    // Build detailed analysis HTML
+    let html = '<div class="enhanced-analysis-details">';
+
+    // Authentication
+    if (enhancedAnalysisData.authentication) {
+        const auth = enhancedAnalysisData.authentication;
+        html += `<div class="card mb-3">
+            <div class="card-header bg-success text-white"><i class="fas fa-certificate"></i> Authentication</div>
+            <div class="card-body">
+                <p><strong>Authentic:</strong> ${auth.is_authentic ? '✅ Yes' : '❌ Questionable'}</p>
+                <p><strong>Confidence:</strong> ${auth.confidence_level || 'N/A'}</p>
+                ${auth.red_flags ? `<p class="text-danger"><strong>Red Flags:</strong> ${auth.red_flags}</p>` : ''}
+            </div>
+        </div>`;
+    }
+
+    // Grading
+    if (enhancedAnalysisData.grading) {
+        const grade = enhancedAnalysisData.grading;
+        html += `<div class="card mb-3">
+            <div class="card-header bg-primary text-white"><i class="fas fa-award"></i> Grading</div>
+            <div class="card-body">
+                ${grade.overall_grade ? `<p><strong>Grade:</strong> ${grade.overall_grade}</p>` : ''}
+                ${grade.centering ? `<p><strong>Centering:</strong> ${grade.centering}</p>` : ''}
+                ${grade.corners ? `<p><strong>Corners:</strong> ${grade.corners}</p>` : ''}
+                ${grade.edges ? `<p><strong>Edges:</strong> ${grade.edges}</p>` : ''}
+                ${grade.surface ? `<p><strong>Surface:</strong> ${grade.surface}</p>` : ''}
+            </div>
+        </div>`;
+    }
+
+    // Rarity
+    if (enhancedAnalysisData.rarity) {
+        const rarity = enhancedAnalysisData.rarity;
+        html += `<div class="card mb-3">
+            <div class="card-header bg-warning text-dark"><i class="fas fa-star"></i> Rarity</div>
+            <div class="card-body">
+                ${rarity.rarity_level ? `<p><strong>Rarity:</strong> ${rarity.rarity_level}</p>` : ''}
+                ${rarity.print_run ? `<p><strong>Print Run:</strong> ${rarity.print_run}</p>` : ''}
+                ${rarity.variants ? `<p><strong>Variants:</strong> ${rarity.variants}</p>` : ''}
+            </div>
+        </div>`;
+    }
+
+    // Market Analysis
+    if (enhancedAnalysisData.market_analysis) {
+        const market = enhancedAnalysisData.market_analysis;
+        html += `<div class="card mb-3">
+            <div class="card-header bg-info text-white"><i class="fas fa-chart-line"></i> Market Analysis</div>
+            <div class="card-body">
+                ${market.price_range ? `<p><strong>Price Range:</strong> ${market.price_range}</p>` : ''}
+                ${market.recent_sales ? `<p><strong>Recent Sales:</strong> ${market.recent_sales}</p>` : ''}
+                ${market.market_trend ? `<p><strong>Trend:</strong> ${market.market_trend}</p>` : ''}
+                ${market.demand_level ? `<p><strong>Demand:</strong> ${market.demand_level}</p>` : ''}
+            </div>
+        </div>`;
+    }
+
+    // Recommendations
+    if (enhancedAnalysisData.recommendations) {
+        const rec = enhancedAnalysisData.recommendations;
+        html += `<div class="card mb-3">
+            <div class="card-header bg-secondary text-white"><i class="fas fa-lightbulb"></i> Recommendations</div>
+            <div class="card-body">
+                ${rec.suggested_price ? `<p><strong>Suggested Price:</strong> ${rec.suggested_price}</p>` : ''}
+                ${rec.best_platforms ? `<p><strong>Best Platforms:</strong> ${rec.best_platforms}</p>` : ''}
+                ${rec.target_buyers ? `<p><strong>Target Buyers:</strong> ${rec.target_buyers}</p>` : ''}
+                ${rec.selling_tips ? `<p><strong>Tips:</strong> ${rec.selling_tips}</p>` : ''}
+            </div>
+        </div>`;
+    }
+
+    // Fraud Check
+    if (enhancedAnalysisData.fraud_check) {
+        const fraud = enhancedAnalysisData.fraud_check;
+        html += `<div class="card mb-3">
+            <div class="card-header bg-danger text-white"><i class="fas fa-shield-alt"></i> Fraud Check</div>
+            <div class="card-body">
+                ${fraud.authentication_concerns ? `<p><strong>Concerns:</strong> ${fraud.authentication_concerns}</p>` : ''}
+                ${fraud.grading_recommended ? `<p><strong>Grading Recommended:</strong> ${fraud.grading_recommended ? 'Yes' : 'No'}</p>` : ''}
+            </div>
+        </div>`;
+    }
+
+    html += '</div>';
+
+    // Create modal
+    const modalHtml = `
+        <div class="modal fade" id="enhancedAnalysisModal" tabindex="-1">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning">
+                        <h5 class="modal-title"><i class="fas fa-gem"></i> Enhanced Collectible Analysis</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        ${html}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('enhancedAnalysisModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('enhancedAnalysisModal'));
+    modal.show();
+});
 
 // ========================================
 // CARD COLLECTION FUNCTIONS

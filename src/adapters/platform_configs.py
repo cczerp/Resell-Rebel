@@ -890,6 +890,88 @@ def create_offerup_mapper() -> PlatformFieldMapper:
 
 
 # ============================================================================
+# MERCARI (Browser Automation - Import from other platforms)
+# ============================================================================
+
+def create_mercari_mapper() -> PlatformFieldMapper:
+    """
+    Mercari browser automation field mapping.
+
+    Note: Mercari uses browser automation (see MERCARI_DEBUG.md)
+    Can import listings from other platforms (Etsy, eBay, Poshmark)
+    Can relist Mercari items to other platforms
+    """
+    mapper = PlatformFieldMapper("Mercari")
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="title",
+        unified_field_path="title",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=40,  # Mercari has strict 40 char limit
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="description",
+        unified_field_path="description",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=1000,  # Mercari limit
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="price",
+        unified_field_path="price.amount",
+        field_type=FieldType.FLOAT,
+        required=True,
+        min_value=3.00,  # Mercari minimum is $3
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="brand",
+        unified_field_path="item_specifics.brand",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="size",
+        unified_field_path="item_specifics.size",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="color",
+        unified_field_path="item_specifics.color",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="category",
+        unified_field_path="category.primary",
+        field_type=FieldType.STRING,
+        required=True,
+        transform=extract_primary_category,
+    ))
+
+    # Condition mapping
+    mapper.set_condition_map({
+        ListingCondition.NEW: "New",
+        ListingCondition.NEW_WITH_TAGS: "New",
+        ListingCondition.NEW_WITHOUT_TAGS: "New",
+        ListingCondition.LIKE_NEW: "Like New",
+        ListingCondition.EXCELLENT: "Good",
+        ListingCondition.GOOD: "Good",
+        ListingCondition.FAIR: "Fair",
+        ListingCondition.POOR: "Poor",
+    })
+
+    return mapper
+
+
+# ============================================================================
 # Factory Function
 # ============================================================================
 
@@ -925,6 +1007,7 @@ def get_platform_mapper(platform_name: str) -> PlatformFieldMapper:
         "ruby lane": create_rubylane_mapper,
         "rubylane": create_rubylane_mapper,
         "offerup": create_offerup_mapper,
+        "mercari": create_mercari_mapper,
     }
 
     creator_func = mappers.get(platform_name_lower)
