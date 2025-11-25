@@ -1,6 +1,6 @@
 """
 routes_auth.py
-Authentication routes: login, logout, register, password reset
+Authentication routes: login, logout, register, password reset, Google OAuth
 """
 from flask import Blueprint, request, jsonify, redirect, render_template, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
@@ -285,3 +285,119 @@ def reset_password(token):
     # In full version, validate token and reset password
     flash("Password reset successful. Please login.", "success")
     return redirect(url_for('auth.login'))
+
+
+# =============================================================================
+# GOOGLE OAUTH WITH SUPABASE
+# =============================================================================
+
+@auth_bp.route('/login/google')
+def login_google():
+    """
+    Initiate Google OAuth flow via Supabase.
+
+    Redirects user to Supabase Google OAuth consent screen.
+    """
+    from src.auth_utils import get_google_oauth_url
+
+    oauth_url = get_google_oauth_url()
+
+    if not oauth_url:
+        flash("Google login is not configured. Please contact support.", "error")
+        return redirect(url_for('auth.login'))
+
+    return redirect(oauth_url)
+
+
+@auth_bp.route('/auth/callback')
+def auth_callback():
+    """
+    Handle OAuth callback from Supabase.
+
+    Exchanges authorization code for user session, then logs user in.
+    """
+    from src.auth_utils import exchange_code_for_session
+
+    # Get authorization code from query params
+    code = request.args.get("code")
+    if not code:
+        flash("OAuth authentication failed: Missing authorization code", "error")
+        return redirect(url_for('auth.login'))
+
+    # Exchange code for session
+    session_data = exchange_code_for_session(code)
+
+    if not session_data or session_data.get("error"):
+        error_msg = session_data.get("error") if session_data else "Unknown error"
+        flash(f"OAuth authentication failed: {error_msg}", "error")
+        return redirect(url_for('auth.login'))
+
+    # Extract user data from session
+    try:
+        user_data = session_data.get("user", {})
+        supabase_uid = user_data.get("id")
+        email = user_data.get("email")
+        full_name = user_data.get("user_metadata", {}).get("full_name", "")
+
+        if not supabase_uid or not email:
+            flash("OAuth authentication failed: Invalid user data", "error")
+            return redirect(url_for('auth.login'))
+
+    except Exception as e:
+        flash(f"OAuth authentication failed: {str(e)}", "error")
+        return redirect(url_for('auth.login'))
+
+    # Find or create user in local database
+    local_user = db.get_user_by_supabase_uid(supabase_uid)
+
+    if not local_user:
+        # Check if email already exists (user may have registered with password)
+        local_user = db.get_user_by_email(email)
+
+        if local_user:
+            # Link existing account to Supabase
+            db.link_supabase_account(local_user['id'], supabase_uid, 'google')
+        else:
+            # Create new user
+            username = email.split('@')[0]  # Use email prefix as username
+            # Ensure username is unique
+            base_username = username
+            counter = 1
+            while db.get_user_by_username(username):
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            user_id = db.create_oauth_user(
+                username=username,
+                email=email,
+                supabase_uid=supabase_uid,
+                oauth_provider='google'
+            )
+
+            local_user = db.get_user_by_id(user_id)
+
+    # Create Flask-Login User object
+    user = User(
+        local_user['id'],
+        local_user['username'],
+        local_user['email'],
+        local_user.get('is_admin', False),
+        local_user.get('is_active', True),
+        local_user.get('tier', 'FREE')
+    )
+
+    # Log user in
+    login_user(user, remember=True)
+
+    # Log activity
+    db.log_activity(
+        action="google_login",
+        user_id=user.id,
+        resource_type="user",
+        resource_id=user.id,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get("User-Agent")
+    )
+
+    flash(f"Welcome{', ' + full_name if full_name else ''}! You're now logged in with Google.", "success")
+    return redirect(url_for('index'))

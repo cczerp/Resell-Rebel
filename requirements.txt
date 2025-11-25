@@ -28,6 +28,10 @@ gevent>=23.9.1  # Async worker for better upload handling
 # Database
 psycopg2-binary>=2.9.9  # PostgreSQL adapter
 
+# Authentication (Supabase OAuth)
+supabase>=2.3.0  # Supabase Python client
+pyjwt>=2.8.0  # JWT token handling
+
 # Cloud Storage
 cloudinary>=1.41.0  # Photo storage (FREE tier: 25GB)
 

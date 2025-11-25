@@ -1,0 +1,70 @@
+"""
+Supabase Authentication Utilities
+===================================
+Google OAuth integration with Supabase
+"""
+
+import os
+from typing import Optional, Dict
+from supabase import create_client, Client
+
+def get_supabase_client() -> Optional[Client]:
+    """
+    Create and return Supabase client for OAuth.
+
+    Returns None if SUPABASE_URL or SUPABASE_ANON_KEY are not configured.
+    """
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_ANON_KEY")
+
+    if not supabase_url or not supabase_key:
+        return None
+
+    try:
+        return create_client(supabase_url, supabase_key)
+    except Exception as e:
+        print(f"Failed to create Supabase client: {e}")
+        return None
+
+
+def get_google_oauth_url() -> Optional[str]:
+    """
+    Generate Google OAuth URL via Supabase.
+
+    Returns:
+        OAuth URL string or None if Supabase is not configured
+    """
+    supabase_url = os.getenv("SUPABASE_URL")
+    redirect_url = os.getenv("SUPABASE_REDIRECT_URL", "http://localhost:5000/auth/callback")
+
+    if not supabase_url:
+        return None
+
+    # Construct Supabase OAuth URL
+    return (
+        f"{supabase_url}/auth/v1/authorize"
+        f"?provider=google"
+        f"&redirect_to={redirect_url}"
+    )
+
+
+def exchange_code_for_session(auth_code: str) -> Optional[Dict]:
+    """
+    Exchange OAuth code for user session.
+
+    Args:
+        auth_code: OAuth authorization code from callback
+
+    Returns:
+        Dict with user data and session, or None if failed
+    """
+    supabase = get_supabase_client()
+    if not supabase:
+        return None
+
+    try:
+        response = supabase.auth.exchange_code_for_session({"code": auth_code})
+        return response
+    except Exception as e:
+        print(f"Failed to exchange code for session: {e}")
+        return None

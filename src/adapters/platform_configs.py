@@ -972,6 +972,420 @@ def create_mercari_mapper() -> PlatformFieldMapper:
 
 
 # ============================================================================
+# VINTED (Manual/CSV)
+# ============================================================================
+
+def create_vinted_mapper() -> PlatformFieldMapper:
+    """
+    Vinted CSV/manual listing field mapping.
+
+    Note: Vinted doesn't have an official API for selling.
+    Users can manually enter listings or use browser automation.
+    """
+    mapper = PlatformFieldMapper("Vinted")
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="title",
+        unified_field_path="title",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=100,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="description",
+        unified_field_path="description",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=2000,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="price",
+        unified_field_path="price.amount",
+        field_type=FieldType.FLOAT,
+        required=True,
+        min_value=0.50,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="brand",
+        unified_field_path="item_specifics.brand",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="size",
+        unified_field_path="item_specifics.size",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="color",
+        unified_field_path="item_specifics.color",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="category",
+        unified_field_path="category.primary",
+        field_type=FieldType.STRING,
+        required=True,
+        transform=extract_primary_category,
+    ))
+
+    # Condition mapping
+    mapper.set_condition_map({
+        ListingCondition.NEW: "New with tags",
+        ListingCondition.NEW_WITH_TAGS: "New with tags",
+        ListingCondition.NEW_WITHOUT_TAGS: "New without tags",
+        ListingCondition.LIKE_NEW: "Very good",
+        ListingCondition.EXCELLENT: "Good",
+        ListingCondition.GOOD: "Satisfactory",
+        ListingCondition.FAIR: "Satisfactory",
+        ListingCondition.POOR: "Satisfactory",
+    })
+
+    return mapper
+
+
+# ============================================================================
+# THREDUP (Consignment - Manual Entry)
+# ============================================================================
+
+def create_thredup_mapper() -> PlatformFieldMapper:
+    """
+    ThredUp consignment field mapping.
+
+    Note: ThredUp typically requires sending items for consignment.
+    This mapper is for inventory tracking purposes.
+    """
+    mapper = PlatformFieldMapper("ThredUp")
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="title",
+        unified_field_path="title",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=100,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="brand",
+        unified_field_path="item_specifics.brand",
+        field_type=FieldType.STRING,
+        required=True,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="category",
+        unified_field_path="category.primary",
+        field_type=FieldType.STRING,
+        required=True,
+        transform=extract_primary_category,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="size",
+        unified_field_path="item_specifics.size",
+        field_type=FieldType.STRING,
+        required=True,
+    ))
+
+    # Condition mapping
+    mapper.set_condition_map({
+        ListingCondition.NEW: "New",
+        ListingCondition.NEW_WITH_TAGS: "New",
+        ListingCondition.NEW_WITHOUT_TAGS: "Like New",
+        ListingCondition.LIKE_NEW: "Like New",
+        ListingCondition.EXCELLENT: "Excellent",
+        ListingCondition.GOOD: "Good",
+        ListingCondition.FAIR: "Fair",
+        ListingCondition.POOR: "Poor",
+    })
+
+    return mapper
+
+
+# ============================================================================
+# GOAT (Sneakers & Streetwear)
+# ============================================================================
+
+def create_goat_mapper() -> PlatformFieldMapper:
+    """
+    GOAT marketplace field mapping (sneakers/streetwear).
+
+    Note: GOAT requires authentication and verification for sellers.
+    Primarily used for sneakers and authenticated streetwear.
+    """
+    mapper = PlatformFieldMapper("GOAT")
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="title",
+        unified_field_path="title",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=200,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="brand",
+        unified_field_path="item_specifics.brand",
+        field_type=FieldType.STRING,
+        required=True,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="model",
+        unified_field_path="item_specifics.model",
+        field_type=FieldType.STRING,
+        required=True,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="size",
+        unified_field_path="item_specifics.size",
+        field_type=FieldType.STRING,
+        required=True,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="price",
+        unified_field_path="price.amount",
+        field_type=FieldType.FLOAT,
+        required=True,
+        min_value=20.00,
+    ))
+
+    # Condition mapping
+    mapper.set_condition_map({
+        ListingCondition.NEW: "New",
+        ListingCondition.NEW_WITH_TAGS: "New",
+        ListingCondition.NEW_WITHOUT_TAGS: "New (No Box)",
+        ListingCondition.LIKE_NEW: "Used",
+        ListingCondition.EXCELLENT: "Used",
+        ListingCondition.GOOD: "Used",
+        ListingCondition.FAIR: "Used",
+        ListingCondition.POOR: "Used",
+    })
+
+    return mapper
+
+
+# ============================================================================
+# STOCKX (Sneakers & Collectibles)
+# ============================================================================
+
+def create_stockx_mapper() -> PlatformFieldMapper:
+    """
+    StockX marketplace field mapping.
+
+    Note: StockX is primarily for authenticated sneakers, streetwear,
+    electronics, collectibles, and trading cards.
+    """
+    mapper = PlatformFieldMapper("StockX")
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="title",
+        unified_field_path="title",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=200,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="brand",
+        unified_field_path="item_specifics.brand",
+        field_type=FieldType.STRING,
+        required=True,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="model",
+        unified_field_path="item_specifics.model",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="size",
+        unified_field_path="item_specifics.size",
+        field_type=FieldType.STRING,
+        required=False,  # Not all items have sizes
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="asking_price",
+        unified_field_path="price.amount",
+        field_type=FieldType.FLOAT,
+        required=True,
+    ))
+
+    # Condition mapping - StockX is primarily for new items
+    mapper.set_condition_map({
+        ListingCondition.NEW: "New",
+        ListingCondition.NEW_WITH_TAGS: "New",
+        ListingCondition.NEW_WITHOUT_TAGS: "New (Defects)",
+        ListingCondition.LIKE_NEW: "New (Defects)",
+        ListingCondition.EXCELLENT: "Used",
+        ListingCondition.GOOD: "Used",
+        ListingCondition.FAIR: "Used",
+        ListingCondition.POOR: "Used",
+    })
+
+    return mapper
+
+
+# ============================================================================
+# WHATNOT (Live Auction Platform)
+# ============================================================================
+
+def create_whatnot_mapper() -> PlatformFieldMapper:
+    """
+    Whatnot live streaming auction field mapping.
+
+    Note: Whatnot is primarily for live auctions and drops.
+    This mapper helps prepare inventory for live shows.
+    """
+    mapper = PlatformFieldMapper("Whatnot")
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="title",
+        unified_field_path="title",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=80,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="description",
+        unified_field_path="description",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=1000,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="starting_bid",
+        unified_field_path="price.amount",
+        field_type=FieldType.FLOAT,
+        required=True,
+        min_value=1.00,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="category",
+        unified_field_path="category.primary",
+        field_type=FieldType.STRING,
+        required=True,
+        transform=extract_primary_category,
+    ))
+
+    # Condition mapping
+    mapper.set_condition_map({
+        ListingCondition.NEW: "New",
+        ListingCondition.NEW_WITH_TAGS: "New",
+        ListingCondition.NEW_WITHOUT_TAGS: "New",
+        ListingCondition.LIKE_NEW: "Near Mint",
+        ListingCondition.EXCELLENT: "Excellent",
+        ListingCondition.GOOD: "Good",
+        ListingCondition.FAIR: "Fair",
+        ListingCondition.POOR: "Poor",
+    })
+
+    return mapper
+
+
+# ============================================================================
+# PERSONAL/SELF-HOSTED WEBSITE
+# ============================================================================
+
+def create_personal_site_mapper() -> PlatformFieldMapper:
+    """
+    Personal website / self-hosted store field mapping.
+
+    Generic mapper for personal websites, custom stores,
+    or any self-hosted e-commerce solution.
+    """
+    mapper = PlatformFieldMapper("Personal Website")
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="title",
+        unified_field_path="title",
+        field_type=FieldType.STRING,
+        required=True,
+        max_length=500,  # No strict limit
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="description",
+        unified_field_path="description",
+        field_type=FieldType.STRING,
+        required=True,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="price",
+        unified_field_path="price.amount",
+        field_type=FieldType.FLOAT,
+        required=True,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="sku",
+        unified_field_path="sku",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="quantity",
+        unified_field_path="quantity",
+        field_type=FieldType.INTEGER,
+        default_value=1,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="brand",
+        unified_field_path="item_specifics.brand",
+        field_type=FieldType.STRING,
+        required=False,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="category",
+        unified_field_path="category.primary",
+        field_type=FieldType.STRING,
+        required=False,
+        transform=extract_primary_category,
+    ))
+
+    mapper.add_field_rule(FieldRule(
+        platform_field_name="tags",
+        unified_field_path="seo_data.keywords",
+        field_type=FieldType.ARRAY,
+        required=False,
+    ))
+
+    # Generic condition mapping
+    mapper.set_condition_map({
+        ListingCondition.NEW: "New",
+        ListingCondition.NEW_WITH_TAGS: "New with Tags",
+        ListingCondition.NEW_WITHOUT_TAGS: "New without Tags",
+        ListingCondition.LIKE_NEW: "Like New",
+        ListingCondition.EXCELLENT: "Excellent",
+        ListingCondition.GOOD: "Good",
+        ListingCondition.FAIR: "Fair",
+        ListingCondition.POOR: "Poor",
+    })
+
+    return mapper
+
+
+# ============================================================================
 # Factory Function
 # ============================================================================
 
@@ -1008,6 +1422,14 @@ def get_platform_mapper(platform_name: str) -> PlatformFieldMapper:
         "rubylane": create_rubylane_mapper,
         "offerup": create_offerup_mapper,
         "mercari": create_mercari_mapper,
+        "vinted": create_vinted_mapper,
+        "thredup": create_thredup_mapper,
+        "goat": create_goat_mapper,
+        "stockx": create_stockx_mapper,
+        "whatnot": create_whatnot_mapper,
+        "personal": create_personal_site_mapper,
+        "personal website": create_personal_site_mapper,
+        "self-hosted": create_personal_site_mapper,
     }
 
     creator_func = mappers.get(platform_name_lower)

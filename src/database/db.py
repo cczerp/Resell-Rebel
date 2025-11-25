@@ -125,7 +125,9 @@ class Database:
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
+                password_hash TEXT,
+                supabase_uid TEXT UNIQUE,
+                oauth_provider TEXT,
                 is_admin BOOLEAN DEFAULT FALSE,
                 is_active BOOLEAN DEFAULT TRUE,
                 tier TEXT DEFAULT 'FREE',
@@ -137,6 +139,42 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP
             )
+        """)
+
+        # Add supabase_uid column if it doesn't exist (migration)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'supabase_uid'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN supabase_uid TEXT UNIQUE;
+                END IF;
+            END $$;
+        """)
+
+        # Add oauth_provider column if it doesn't exist (migration)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'oauth_provider'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN oauth_provider TEXT;
+                END IF;
+            END $$;
+        """)
+
+        # Make password_hash nullable for OAuth users (migration)
+        cursor.execute("""
+            DO $$
+            BEGIN
+                ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+            EXCEPTION
+                WHEN OTHERS THEN NULL;
+            END $$;
         """)
 
         # Marketplace credentials - per user
@@ -1441,6 +1479,38 @@ class Database:
             SET notification_email = %s
             WHERE id = %s
         """, (notification_email, user_id))
+        self.conn.commit()
+
+    # OAuth-specific methods
+    def get_user_by_supabase_uid(self, supabase_uid: str) -> Optional[Dict]:
+        """Get user by Supabase UID (for OAuth)"""
+        cursor = self._get_cursor()
+        cursor.execute("SELECT * FROM users WHERE supabase_uid = %s", (supabase_uid,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def create_oauth_user(self, username: str, email: str, supabase_uid: str, oauth_provider: str) -> int:
+        """Create a new OAuth user (no password)"""
+        cursor = self._get_cursor()
+        cursor.execute("""
+            INSERT INTO users (username, email, supabase_uid, oauth_provider, email_verified)
+            VALUES (%s, %s, %s, %s, TRUE)
+            RETURNING id
+        """, (username, email, supabase_uid, oauth_provider))
+        result = cursor.fetchone()
+        self.conn.commit()
+        return result['id']
+
+    def link_supabase_account(self, user_id: int, supabase_uid: str, oauth_provider: str):
+        """Link an existing user account to Supabase OAuth"""
+        cursor = self._get_cursor()
+        cursor.execute("""
+            UPDATE users
+            SET supabase_uid = %s,
+                oauth_provider = %s,
+                email_verified = TRUE
+            WHERE id = %s
+        """, (supabase_uid, oauth_provider, user_id))
         self.conn.commit()
 
     # ========================================================================
