@@ -161,23 +161,24 @@ class Database:
             self.conn.rollback()
             print(f"Note: oauth_provider column may already exist: {e}")
 
-        # Add unique constraint to supabase_uid if not exists (separate step for performance)
+        # Add unique constraint to supabase_uid if not exists (non-blocking, best effort)
+        # This may timeout on large tables - that's OK, we can add it later manually
         try:
+            cursor.execute("SET statement_timeout = '30s'")  # 30 second timeout
             cursor.execute("""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM pg_constraint
-                        WHERE conname = 'users_supabase_uid_key'
-                    ) THEN
-                        ALTER TABLE users ADD CONSTRAINT users_supabase_uid_key UNIQUE (supabase_uid);
-                    END IF;
-                END $$;
+                ALTER TABLE users ADD CONSTRAINT users_supabase_uid_key UNIQUE (supabase_uid)
             """)
             self.conn.commit()
+            print("✓ Added UNIQUE constraint to supabase_uid")
         except Exception as e:
             self.conn.rollback()
-            print(f"Note: UNIQUE constraint on supabase_uid may already exist: {e}")
+            print(f"⚠ Skipping UNIQUE constraint on supabase_uid (can add later): {e}")
+            # Reset timeout
+            try:
+                cursor.execute("SET statement_timeout = 0")
+                self.conn.commit()
+            except:
+                pass
 
         # Make password_hash nullable for OAuth users (migration)
         try:
