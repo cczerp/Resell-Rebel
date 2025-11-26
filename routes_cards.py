@@ -32,37 +32,6 @@ def cards_collection():
 
 
 # =============================================================================
-# ANALYZE CARD (Gemini-based)
-# =============================================================================
-
-@cards_bp.route('/api/analyze-card', methods=['POST'])
-@login_required
-def api_analyze_card():
-    """Analyze uploaded photos to detect and classify cards."""
-    try:
-        from src.ai.gemini_classifier import analyze_card
-        from src.schema.unified_listing import Photo
-        
-        data = request.get_json()
-        photo_paths = data.get('photos', [])
-        
-        if not photo_paths:
-            return jsonify({'error': 'No photos provided'}), 400
-        
-        photos = [Photo(url="", local_path=path) for path in photo_paths]
-        result = analyze_card(photos)
-        
-        if result.get('error'):
-            return jsonify(result), 500
-        
-        return jsonify({'success': True, 'card_data': result})
-
-    except Exception as e:
-        print("Card analysis error:", str(e))
-        return jsonify({'error': str(e)}), 500
-
-
-# =============================================================================
 # ADD CARD
 # =============================================================================
 

@@ -238,7 +238,6 @@ def cards_collection():
 # -------------------------------------------------------------------------
 
 @main_bp.route("/api/analyze-card", methods=["POST"])
-@login_required
 def api_analyze_card():
     try:
         from src.ai.gemini_classifier import analyze_card
@@ -283,7 +282,6 @@ def api_analyze_card():
 
 
 @main_bp.route("/api/analyze", methods=["POST"])
-@login_required
 def api_analyze():
     """Analyze item photos using Gemini (fast) and optionally Claude for deep collectible analysis."""
     try:
