@@ -741,7 +741,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
             } else {
                 // Show detailed error message
                 const errorMsg = data.error || 'Unknown error occurred';
-                const errorDetails = data.details ? `\n\nDetails: ${data.details}` : '';
+                const errorDetails = data.details ? ' - ' + data.details : '';
                 console.error('Analysis error:', errorMsg, errorDetails);
                 showAlert('AI analysis error: ' + errorMsg + errorDetails, 'danger');
             }
@@ -786,16 +786,13 @@ document.getElementById('enhancedAnalyzerBtn').addEventListener('click', async f
                 showAlert('Enhanced analysis complete!', 'success');
             } else if (data.error) {
                 showAlert('Enhanced analysis failed: ' + data.error, 'danger');
-                hideLoading();
                 return;
             } else {
                 showAlert('Enhanced analysis not available for this item. This feature works best with collectibles, trading cards, and sports memorabilia.', 'warning');
-                hideLoading();
                 return;
             }
         } catch (error) {
             showAlert('Enhanced analysis failed: ' + error, 'danger');
-            hideLoading();
             return;
         } finally {
             hideLoading();
