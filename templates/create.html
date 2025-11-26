@@ -37,8 +37,8 @@
             <button type="button" class="btn btn-secondary mt-2" id="analyzeBtn" style="display:none;">
                 <i class="fas fa-magic"></i> Analyze with AI
             </button>
-            <button type="button" class="btn btn-outline-warning mt-2 ms-2" id="enhancedAnalyzerBtn" disabled title="Scan a collectible or card to enable">
-                <i class="fas fa-gem"></i> Enhanced Analyzer (Collectibles Only)
+            <button type="button" class="btn btn-outline-warning mt-2 ms-2" id="enhancedAnalyzerBtn" disabled title="Run AI analysis first to enable this feature">
+                <i class="fas fa-gem"></i> Enhanced Analyzer
             </button>
         </div>
     </div>
@@ -689,12 +689,19 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
                     // Auto-set item type to collectible
                     document.getElementById('item_type').value = 'collectible';
 
-                    // Enable enhanced analyzer button
+                    // Enable enhanced analyzer button (collectible detected)
                     const enhancedBtn = document.getElementById('enhancedAnalyzerBtn');
                     enhancedBtn.disabled = false;
                     enhancedBtn.classList.remove('btn-outline-warning');
                     enhancedBtn.classList.add('btn-warning');
                     enhancedBtn.title = 'Click for detailed collectible analysis';
+                } else {
+                    // Enable enhanced analyzer for all items (works best with collectibles)
+                    const enhancedBtn = document.getElementById('enhancedAnalyzerBtn');
+                    enhancedBtn.disabled = false;
+                    enhancedBtn.classList.remove('btn-outline-warning');
+                    enhancedBtn.classList.add('btn-warning');
+                    enhancedBtn.title = 'Run enhanced analysis (works best with collectibles and cards)';
                 }
 
                 // Show market analysis (sell-through rate)
