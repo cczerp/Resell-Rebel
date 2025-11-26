@@ -1180,6 +1180,14 @@ async function saveListing(status = 'draft') {
             body: JSON.stringify(formData)
         });
 
+        // Handle authentication errors
+        if (response.status === 401 || response.status === 403) {
+            hideLoading();
+            showAlert('You must be logged in to save listings. Redirecting to login...', 'warning');
+            setTimeout(() => window.location.href = '/login', 2000);
+            return;
+        }
+
         const data = await response.json();
 
         if (data.success) {
@@ -1188,7 +1196,7 @@ async function saveListing(status = 'draft') {
             showAlert(msg, 'success');
             setTimeout(() => window.location.href = redirect, 1500);
         } else {
-            showAlert(data.error, 'danger');
+            showAlert(data.error || 'Failed to save listing', 'danger');
         }
     } catch (error) {
         showAlert('Save failed: ' + error, 'danger');
