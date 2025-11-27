@@ -5,8 +5,28 @@ Google OAuth integration with Supabase
 """
 
 import os
+import base64
+import hashlib
+import secrets
 from typing import Optional, Dict
 from supabase import create_client, Client
+
+
+def generate_pkce_pair():
+    """
+    Generate PKCE code verifier and code challenge.
+
+    Returns:
+        Tuple of (code_verifier, code_challenge)
+    """
+    # Generate a random code verifier (43-128 characters)
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+
+    # Generate code challenge from verifier using SHA256
+    challenge_bytes = hashlib.sha256(code_verifier.encode('utf-8')).digest()
+    code_challenge = base64.urlsafe_b64encode(challenge_bytes).decode('utf-8').rstrip('=')
+
+    return code_verifier, code_challenge
 
 def get_supabase_client() -> Optional[Client]:
     """
@@ -57,43 +77,33 @@ def get_google_oauth_url(session_storage: dict = None) -> Optional[str]:
     if not supabase_url:
         return None
 
-    # Use Supabase client to initiate OAuth with PKCE
     try:
-        supabase = get_supabase_client()
-        if not supabase:
-            print("Error: Could not create Supabase client")
-            return None
+        print(f"Generating OAuth URL for redirect: {redirect_url}")
 
-        print(f"Attempting to generate OAuth URL for redirect: {redirect_url}")
+        # Generate our own PKCE parameters
+        code_verifier, code_challenge = generate_pkce_pair()
+        print(f"Generated PKCE code verifier and challenge")
 
-        # Use sign_in_with_oauth which handles PKCE properly
-        response = supabase.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {
-                "redirect_to": redirect_url
-            }
-        })
-
-        print(f"OAuth response type: {type(response)}")
-
-        # Try to extract code verifier and store in session
-        if hasattr(response, 'code_verifier') and session_storage is not None:
-            session_storage['oauth_code_verifier'] = response.code_verifier
-            print(f"Stored code verifier in session")
-        elif isinstance(response, dict) and 'code_verifier' in response and session_storage is not None:
-            session_storage['oauth_code_verifier'] = response['code_verifier']
-            print(f"Stored code verifier in session (from dict)")
-
-        # Try different ways to get the URL
-        if hasattr(response, 'url'):
-            print(f"Found URL via .url attribute")
-            return response.url
-        elif isinstance(response, dict) and 'url' in response:
-            print(f"Found URL in dict")
-            return response['url']
+        # Store code verifier in session for later use
+        if session_storage is not None:
+            session_storage['oauth_code_verifier'] = code_verifier
+            print(f"Stored code verifier in session: {code_verifier[:10]}...")
         else:
-            print(f"Could not find URL in response. Available attributes: {dir(response) if hasattr(response, '__dir__') else 'N/A'}")
-            return None
+            print(f"Warning: No session storage provided, PKCE will fail")
+
+        # Construct OAuth URL manually with our PKCE parameters
+        from urllib.parse import urlencode
+        params = {
+            'provider': 'google',
+            'redirect_to': redirect_url,
+            'code_challenge': code_challenge,
+            'code_challenge_method': 's256'
+        }
+        oauth_url = f"{supabase_url}/auth/v1/authorize?{urlencode(params)}"
+
+        print(f"Generated OAuth URL with PKCE")
+        return oauth_url
+
     except Exception as e:
         print(f"Error generating OAuth URL: {e}")
         import traceback
