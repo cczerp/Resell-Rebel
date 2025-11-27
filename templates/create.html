@@ -34,7 +34,7 @@
                 </div>
             </div>
             <div id="photoPreview" class="mt-3 d-flex flex-wrap"></div>
-            <button type="button" class="btn btn-secondary mt-2" id="analyzeBtn" style="display:none;">
+            <button type="button" class="btn btn-secondary mt-2" id="analyzeBtn" disabled title="Upload photos first to enable AI analysis">
                 <i class="fas fa-magic"></i> Analyze with AI
             </button>
             <button type="button" class="btn btn-outline-warning mt-2 ms-2" id="enhancedAnalyzerBtn" disabled title="Run AI analysis first to enable this feature">
@@ -271,7 +271,10 @@ async function handlePhotoSelect(e) {
                 previewDiv.appendChild(img);
             }
 
-            document.getElementById('analyzeBtn').style.display = 'block';
+            // Enable the analyze button when photos are uploaded
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            analyzeBtn.disabled = false;
+            analyzeBtn.title = 'Click to analyze photos with AI';
             showAlert(`${data.count} photo(s) added! Total: ${uploadedPhotos.length}`, 'success');
         } else {
             showAlert(data.error, 'danger');
@@ -1311,7 +1314,10 @@ async function loadDraftData() {
                     previewDiv.appendChild(img);
                 }
 
-                document.getElementById('analyzeBtn').style.display = 'block';
+                // Enable the analyze button when photos are loaded from draft
+                const analyzeBtn = document.getElementById('analyzeBtn');
+                analyzeBtn.disabled = false;
+                analyzeBtn.title = 'Click to analyze photos with AI';
             }
 
             showAlert('Draft loaded for editing', 'info');
