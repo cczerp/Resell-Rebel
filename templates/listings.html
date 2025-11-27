@@ -5,15 +5,28 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0"><i class="fas fa-list"></i> Active Listings</h2>
+    <div class="btn-group">
+        <button class="btn btn-outline-primary" id="cardViewBtn" onclick="switchView('card')">
+            <i class="fas fa-th-large"></i> Card View
+        </button>
+        <button class="btn btn-outline-success" id="csvViewBtn" onclick="switchView('csv')">
+            <i class="fas fa-file-csv"></i> CSV Manager
+        </button>
+    </div>
+</div>
+
+<!-- Card View (default) -->
+<div id="cardView">
     {% if listings %}
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="selectAll" onchange="toggleSelectAll()">
-        <label class="form-check-label" for="selectAll">
-            Select All
-        </label>
+    <div class="mb-3">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+            <label class="form-check-label" for="selectAll">
+                Select All
+            </label>
+        </div>
     </div>
     {% endif %}
-</div>
 
 <!-- Bulk Action Bar (hidden by default) -->
 <div id="bulkActionBar" class="card mb-3" style="display:none;">
@@ -165,6 +178,128 @@
         </a>
     </div>
 {% endif %}
+</div>
+<!-- End Card View -->
+
+<!-- CSV Manager View -->
+<div id="csvView" style="display: none;">
+    <div class="card mb-3">
+        <div class="card-header bg-success text-white">
+            <i class="fas fa-table"></i> CSV Manager - Organize & Export by Category
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Select items by category and export to platform-specific CSV files</p>
+
+            <!-- Category Filter -->
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Category:</label>
+                    <select class="form-select" id="csvCategoryFilter" onchange="filterCSVByCategory()">
+                        <option value="">All Items</option>
+                        <option value="clothing">Clothing</option>
+                        <option value="shoes">Shoes</option>
+                        <option value="electronics">Electronics</option>
+                        <option value="accessories">Accessories</option>
+                        <option value="collectible">Collectibles</option>
+                        <option value="toys">Toys</option>
+                        <option value="home">Home & Garden</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Condition:</label>
+                    <select class="form-select" id="csvConditionFilter" onchange="filterCSVByCategory()">
+                        <option value="">All Conditions</option>
+                        <option value="new">New</option>
+                        <option value="like_new">Like New</option>
+                        <option value="good">Good</option>
+                        <option value="fair">Fair</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Quick Actions:</label>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary btn-sm" onclick="selectAllCSV()">
+                            <i class="fas fa-check-double"></i> Select All Visible
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spreadsheet Table -->
+            <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                <table class="table table-hover table-striped" id="csvTable">
+                    <thead style="position: sticky; top: 0; background: var(--card-bg); z-index: 10;">
+                        <tr>
+                            <th><input type="checkbox" id="csvSelectAll" onchange="toggleAllCSVRows()"></th>
+                            <th>Photo</th>
+                            <th>Title</th>
+                            <th>Price</th>
+                            <th>Category</th>
+                            <th>Condition</th>
+                            <th>Brand</th>
+                            <th>Size</th>
+                            <th>Color</th>
+                            <th>Quantity</th>
+                            <th>Storage</th>
+                        </tr>
+                    </thead>
+                    <tbody id="csvTableBody">
+                        <!-- Data will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Selected Items Summary -->
+            <div class="alert alert-info mt-3">
+                <i class="fas fa-info-circle"></i> <span id="csvSelectedCount">0</span> items selected
+            </div>
+
+            <!-- Export Options -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <i class="fas fa-download"></i> Export Selected Items
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-primary w-100" onclick="exportToCSV('poshmark')">
+                                <i class="fas fa-tshirt"></i> Export to Poshmark CSV
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-primary w-100" onclick="exportToCSV('mercari')">
+                                <i class="fas fa-shopping-bag"></i> Export to Mercari CSV
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-warning w-100" onclick="exportToCSV('ebay')">
+                                <i class="fab fa-ebay"></i> Export to eBay CSV
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-dark w-100" onclick="exportToCSV('grailed')">
+                                <i class="fas fa-tshirt"></i> Export to Grailed CSV
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-danger w-100" onclick="exportToCSV('depop')">
+                                <i class="fas fa-store"></i> Export to Depop CSV
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button class="btn btn-success w-100" onclick="exportToCSV('generic')">
+                                <i class="fas fa-file-csv"></i> Export to Generic CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- End CSV Manager View -->
+
 {% endblock %}
 
 {% block extra_js %}
@@ -437,5 +572,159 @@ async function markSold(id) {
         hideLoading();
     }
 }
+
+// ========================================
+// CSV MANAGER FUNCTIONS
+// ========================================
+
+let allListingsData = {{ listings|tojson if listings else '[]' }};
+let filteredListingsData = [];
+
+function switchView(view) {
+    const cardView = document.getElementById('cardView');
+    const csvView = document.getElementById('csvView');
+    const cardBtn = document.getElementById('cardViewBtn');
+    const csvBtn = document.getElementById('csvViewBtn');
+
+    if (view === 'card') {
+        cardView.style.display = 'block';
+        csvView.style.display = 'none';
+        cardBtn.classList.add('active');
+        csvBtn.classList.remove('active');
+    } else {
+        cardView.style.display = 'none';
+        csvView.style.display = 'block';
+        cardBtn.classList.remove('active');
+        csvBtn.classList.add('active');
+        // Load CSV data when switching to CSV view
+        loadCSVData();
+    }
+}
+
+function loadCSVData() {
+    filteredListingsData = [...allListingsData];
+    renderCSVTable();
+}
+
+function renderCSVTable() {
+    const tbody = document.getElementById('csvTableBody');
+    tbody.innerHTML = '';
+
+    filteredListingsData.forEach((listing, index) => {
+        const photo = listing.photos ? (typeof listing.photos === 'string' ? JSON.parse(listing.photos)[0] : listing.photos[0]) : null;
+        const row = `
+            <tr>
+                <td><input type="checkbox" class="csv-row-checkbox" data-index="${index}" onchange="updateCSVSelection()"></td>
+                <td>${photo ? `<img src="/${photo}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">` : '<i class="fas fa-image text-muted"></i>'}</td>
+                <td>${listing.title || ''}</td>
+                <td>$${listing.price ? listing.price.toFixed(2) : '0.00'}</td>
+                <td>${listing.category || listing.item_type || 'N/A'}</td>
+                <td>${listing.condition || 'N/A'}</td>
+                <td>${listing.brand || 'N/A'}</td>
+                <td>${listing.size || 'N/A'}</td>
+                <td>${listing.color || 'N/A'}</td>
+                <td>${listing.quantity || 1}</td>
+                <td>${listing.storage_location || 'N/A'}</td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+
+    updateCSVSelection();
+}
+
+function filterCSVByCategory() {
+    const categoryFilter = document.getElementById('csvCategoryFilter').value.toLowerCase();
+    const conditionFilter = document.getElementById('csvConditionFilter').value.toLowerCase();
+
+    filteredListingsData = allListingsData.filter(listing => {
+        const matchesCategory = !categoryFilter ||
+            (listing.category && listing.category.toLowerCase().includes(categoryFilter)) ||
+            (listing.item_type && listing.item_type.toLowerCase().includes(categoryFilter));
+
+        const matchesCondition = !conditionFilter ||
+            (listing.condition && listing.condition.toLowerCase() === conditionFilter);
+
+        return matchesCategory && matchesCondition;
+    });
+
+    renderCSVTable();
+}
+
+function toggleAllCSVRows() {
+    const selectAll = document.getElementById('csvSelectAll');
+    const checkboxes = document.querySelectorAll('.csv-row-checkbox');
+
+    checkboxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+    });
+
+    updateCSVSelection();
+}
+
+function selectAllCSV() {
+    const checkboxes = document.querySelectorAll('.csv-row-checkbox');
+    checkboxes.forEach(cb => cb.checked = true);
+    document.getElementById('csvSelectAll').checked = true;
+    updateCSVSelection();
+}
+
+function updateCSVSelection() {
+    const checkboxes = document.querySelectorAll('.csv-row-checkbox:checked');
+    document.getElementById('csvSelectedCount').textContent = checkboxes.length;
+}
+
+async function exportToCSV(platform) {
+    const selectedCheckboxes = document.querySelectorAll('.csv-row-checkbox:checked');
+
+    if (selectedCheckboxes.length === 0) {
+        showAlert('Please select at least one item to export', 'warning');
+        return;
+    }
+
+    const selectedListings = Array.from(selectedCheckboxes).map(cb => {
+        const index = parseInt(cb.getAttribute('data-index'));
+        return filteredListingsData[index];
+    });
+
+    showLoading();
+
+    try {
+        const response = await fetch('/api/export-csv', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                platform: platform,
+                listings: selectedListings
+            })
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${platform}_export_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+
+            showAlert(`Successfully exported ${selectedCheckboxes.length} items to ${platform} CSV!`, 'success');
+        } else {
+            const data = await response.json();
+            showAlert(data.error || 'Export failed', 'danger');
+        }
+    } catch (error) {
+        showAlert('Failed to export: ' + error, 'danger');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Initialize card view as default
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('cardViewBtn').classList.add('active');
+});
 </script>
 {% endblock %}

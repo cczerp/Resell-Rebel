@@ -1268,3 +1268,143 @@ def api_save_api_credentials():
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------------------------------------------------
+# CSV EXPORT ENDPOINT
+# -------------------------------------------------------------------------
+
+@main_bp.route('/api/export-csv', methods=['POST'])
+@login_required
+def api_export_csv():
+    """Export listings to platform-specific CSV format"""
+    try:
+        import csv
+        import io
+        from flask import make_response
+
+        data = request.get_json()
+        platform = data.get('platform', 'generic')
+        listings = data.get('listings', [])
+
+        if not listings:
+            return jsonify({"error": "No listings provided"}), 400
+
+        # Create CSV in memory
+        output = io.StringIO()
+
+        # Platform-specific CSV formats
+        if platform == 'poshmark':
+            fieldnames = ['Title', 'Description', 'Category', 'Brand', 'Size', 'Color', 'Price', 'Quantity', 'Condition', 'Photos']
+        elif platform == 'mercari':
+            fieldnames = ['Title', 'Description', 'Category', 'Brand', 'Price', 'Condition', 'Shipping Weight', 'Photos']
+        elif platform == 'ebay':
+            fieldnames = ['Title', 'Description', 'Category', 'Price', 'Quantity', 'Condition', 'Brand', 'Photos', 'SKU']
+        elif platform == 'grailed':
+            fieldnames = ['Title', 'Description', 'Designer', 'Size', 'Category', 'Price', 'Condition', 'Photos']
+        elif platform == 'depop':
+            fieldnames = ['Title', 'Description', 'Category', 'Brand', 'Size', 'Price', 'Condition', 'Photos']
+        else:  # generic
+            fieldnames = ['Title', 'Description', 'Price', 'Category', 'Brand', 'Size', 'Color', 'Condition', 'Quantity', 'Storage Location', 'Photos']
+
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for listing in listings:
+            # Parse photos if stored as JSON string
+            photos = listing.get('photos', '')
+            if isinstance(photos, str) and photos:
+                try:
+                    import json
+                    photos = json.loads(photos)
+                    photos = ','.join(photos) if isinstance(photos, list) else photos
+                except:
+                    pass
+
+            # Create row based on platform
+            row = {}
+            if platform == 'poshmark':
+                row = {
+                    'Title': listing.get('title', ''),
+                    'Description': listing.get('description', ''),
+                    'Category': listing.get('category', listing.get('item_type', '')),
+                    'Brand': listing.get('brand', ''),
+                    'Size': listing.get('size', ''),
+                    'Color': listing.get('color', ''),
+                    'Price': listing.get('price', ''),
+                    'Quantity': listing.get('quantity', 1),
+                    'Condition': listing.get('condition', ''),
+                    'Photos': photos
+                }
+            elif platform == 'mercari':
+                row = {
+                    'Title': listing.get('title', ''),
+                    'Description': listing.get('description', ''),
+                    'Category': listing.get('category', listing.get('item_type', '')),
+                    'Brand': listing.get('brand', ''),
+                    'Price': listing.get('price', ''),
+                    'Condition': listing.get('condition', ''),
+                    'Shipping Weight': listing.get('weight', '1 lb'),
+                    'Photos': photos
+                }
+            elif platform == 'ebay':
+                row = {
+                    'Title': listing.get('title', ''),
+                    'Description': listing.get('description', ''),
+                    'Category': listing.get('category', listing.get('item_type', '')),
+                    'Price': listing.get('price', ''),
+                    'Quantity': listing.get('quantity', 1),
+                    'Condition': listing.get('condition', ''),
+                    'Brand': listing.get('brand', ''),
+                    'Photos': photos,
+                    'SKU': listing.get('sku', '')
+                }
+            elif platform == 'grailed':
+                row = {
+                    'Title': listing.get('title', ''),
+                    'Description': listing.get('description', ''),
+                    'Designer': listing.get('brand', ''),
+                    'Size': listing.get('size', ''),
+                    'Category': listing.get('category', listing.get('item_type', '')),
+                    'Price': listing.get('price', ''),
+                    'Condition': listing.get('condition', ''),
+                    'Photos': photos
+                }
+            elif platform == 'depop':
+                row = {
+                    'Title': listing.get('title', ''),
+                    'Description': listing.get('description', ''),
+                    'Category': listing.get('category', listing.get('item_type', '')),
+                    'Brand': listing.get('brand', ''),
+                    'Size': listing.get('size', ''),
+                    'Price': listing.get('price', ''),
+                    'Condition': listing.get('condition', ''),
+                    'Photos': photos
+                }
+            else:  # generic
+                row = {
+                    'Title': listing.get('title', ''),
+                    'Description': listing.get('description', ''),
+                    'Price': listing.get('price', ''),
+                    'Category': listing.get('category', listing.get('item_type', '')),
+                    'Brand': listing.get('brand', ''),
+                    'Size': listing.get('size', ''),
+                    'Color': listing.get('color', ''),
+                    'Condition': listing.get('condition', ''),
+                    'Quantity': listing.get('quantity', 1),
+                    'Storage Location': listing.get('storage_location', ''),
+                    'Photos': photos
+                }
+
+            writer.writerow(row)
+
+        # Create response
+        output.seek(0)
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename={platform}_export.csv'
+
+        return response
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
