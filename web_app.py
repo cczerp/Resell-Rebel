@@ -223,19 +223,32 @@ def storage():
 @login_required
 def storage_clothing():
     """Clothing storage"""
-    return render_template('storage_clothing.html')
+    bins = get_db_instance().get_storage_bins(current_user.id, bin_type='clothing')
+    # Add section counts to each bin
+    for bin in bins:
+        sections = get_db_instance().get_storage_sections(bin['id'])
+        bin['section_count'] = len(sections)
+        bin['sections'] = sections
+    return render_template('storage_clothing.html', bins=bins)
 
 @app.route('/storage/cards')
 @login_required
 def storage_cards():
     """Card storage"""
-    return redirect(url_for('cards.cards_collection'))
+    bins = get_db_instance().get_storage_bins(current_user.id, bin_type='cards')
+    # Add section counts to each bin
+    for bin in bins:
+        sections = get_db_instance().get_storage_sections(bin['id'])
+        bin['section_count'] = len(sections)
+        bin['sections'] = sections
+    return render_template('storage_cards.html', bins=bins)
 
 @app.route('/storage/map')
 @login_required
 def storage_map():
     """Storage map"""
-    return render_template('storage_map.html')
+    storage_map_data = get_db_instance().get_storage_map(current_user.id)
+    return render_template('storage_map.html', storage_map=storage_map_data)
 
 @app.route('/settings')
 @login_required

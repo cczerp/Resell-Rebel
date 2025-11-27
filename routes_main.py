@@ -939,3 +939,219 @@ def api_delete_card(card_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# -------------------------------------------------------------------------
+# STORAGE API ENDPOINTS
+# -------------------------------------------------------------------------
+
+@main_bp.route('/api/storage/bins', methods=['GET'])
+@login_required
+def api_get_storage_bins():
+    """Get all storage bins for the current user"""
+    try:
+        from src.database.db import get_db_instance
+        db = get_db_instance()
+
+        bin_type = request.args.get('type')  # 'clothing' or 'cards'
+        bins = db.get_storage_bins(current_user.id, bin_type)
+
+        # Get section counts for each bin
+        for bin in bins:
+            sections = db.get_storage_sections(bin['id'])
+            bin['section_count'] = len(sections)
+            bin['sections'] = sections
+
+        return jsonify({
+            "success": True,
+            "bins": bins
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route('/api/storage/create-bin', methods=['POST'])
+@login_required
+def api_create_storage_bin():
+    """Create a new storage bin"""
+    try:
+        from src.database.db import get_db_instance
+        db = get_db_instance()
+
+        data = request.get_json()
+        bin_name = data.get('bin_name')
+        bin_type = data.get('bin_type')  # 'clothing' or 'cards'
+        description = data.get('description', '')
+
+        if not bin_name or not bin_type:
+            return jsonify({"error": "bin_name and bin_type are required"}), 400
+
+        bin_id = db.create_storage_bin(
+            user_id=current_user.id,
+            bin_name=bin_name,
+            bin_type=bin_type,
+            description=description
+        )
+
+        return jsonify({
+            "success": True,
+            "bin_id": bin_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route('/api/storage/create-section', methods=['POST'])
+@login_required
+def api_create_storage_section():
+    """Create a new section within a bin"""
+    try:
+        from src.database.db import get_db_instance
+        db = get_db_instance()
+
+        data = request.get_json()
+        bin_id = data.get('bin_id')
+        section_name = data.get('section_name')
+        capacity = data.get('capacity')
+
+        if not bin_id or not section_name:
+            return jsonify({"error": "bin_id and section_name are required"}), 400
+
+        # Verify the bin belongs to the current user
+        bins = db.get_storage_bins(current_user.id)
+        if not any(b['id'] == bin_id for b in bins):
+            return jsonify({"error": "Bin not found or unauthorized"}), 403
+
+        section_id = db.create_storage_section(
+            bin_id=bin_id,
+            section_name=section_name,
+            capacity=capacity
+        )
+
+        return jsonify({
+            "success": True,
+            "section_id": section_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route('/api/storage/items', methods=['GET'])
+@login_required
+def api_get_storage_items():
+    """Get storage items, optionally filtered by bin"""
+    try:
+        from src.database.db import get_db_instance
+        db = get_db_instance()
+
+        bin_id = request.args.get('bin_id', type=int)
+
+        if bin_id:
+            # Verify the bin belongs to the current user
+            bins = db.get_storage_bins(current_user.id)
+            if not any(b['id'] == bin_id for b in bins):
+                return jsonify({"error": "Bin not found or unauthorized"}), 403
+
+            items = db.get_storage_items(current_user.id, bin_id=bin_id)
+        else:
+            items = db.get_storage_items(current_user.id)
+
+        return jsonify({
+            "success": True,
+            "items": items
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route('/api/storage/add-item', methods=['POST'])
+@login_required
+def api_add_storage_item():
+    """Add a new item to storage"""
+    try:
+        from src.database.db import get_db_instance
+        db = get_db_instance()
+
+        data = request.get_json()
+        bin_id = data.get('bin_id')
+        section_id = data.get('section_id')
+        item_type = data.get('item_type')
+        category = data.get('category')
+        title = data.get('title')
+        description = data.get('description')
+        notes = data.get('notes')
+
+        if not bin_id:
+            return jsonify({"error": "bin_id is required"}), 400
+
+        # Verify the bin belongs to the current user
+        bins = db.get_storage_bins(current_user.id)
+        bin_obj = next((b for b in bins if b['id'] == bin_id), None)
+        if not bin_obj:
+            return jsonify({"error": "Bin not found or unauthorized"}), 403
+
+        # Get section name if section_id provided
+        section_name = None
+        if section_id:
+            sections = db.get_storage_sections(bin_id)
+            section_obj = next((s for s in sections if s['id'] == section_id), None)
+            if section_obj:
+                section_name = section_obj['section_name']
+
+        # Generate storage ID
+        storage_id = db.generate_storage_id(
+            user_id=current_user.id,
+            bin_name=bin_obj['bin_name'],
+            section_name=section_name,
+            category=category
+        )
+
+        # Add the item
+        item_id = db.add_storage_item(
+            user_id=current_user.id,
+            storage_id=storage_id,
+            bin_id=bin_id,
+            section_id=section_id,
+            item_type=item_type,
+            category=category,
+            title=title,
+            description=description,
+            notes=notes
+        )
+
+        return jsonify({
+            "success": True,
+            "item_id": item_id,
+            "storage_id": storage_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route('/api/storage/find', methods=['GET'])
+@login_required
+def api_find_storage_item():
+    """Find an item by storage ID"""
+    try:
+        from src.database.db import get_db_instance
+        db = get_db_instance()
+
+        storage_id = request.args.get('storage_id')
+
+        if not storage_id:
+            return jsonify({"error": "storage_id is required"}), 400
+
+        item = db.find_storage_item(current_user.id, storage_id)
+
+        if item:
+            return jsonify({
+                "success": True,
+                "item": item
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Item not found"
+            }), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

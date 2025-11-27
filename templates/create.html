@@ -701,14 +701,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
                     enhancedBtn.classList.remove('btn-outline-warning');
                     enhancedBtn.classList.add('btn-warning');
                     enhancedBtn.title = 'Click for detailed collectible analysis';
-                } else {
-                    // Enable enhanced analyzer for all items (works best with collectibles)
-                    const enhancedBtn = document.getElementById('enhancedAnalyzerBtn');
-                    enhancedBtn.disabled = false;
-                    enhancedBtn.classList.remove('btn-outline-warning');
-                    enhancedBtn.classList.add('btn-warning');
-                    enhancedBtn.title = 'Run enhanced analysis (works best with collectibles and cards)';
                 }
+                // Don't enable enhanced analyzer if no collectible detected
 
                 // Show market analysis (sell-through rate)
                 if (analysis.market_analysis) {
