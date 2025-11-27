@@ -14,8 +14,9 @@ def get_supabase_client() -> Optional[Client]:
 
     Returns None if SUPABASE_URL or SUPABASE_ANON_KEY are not configured.
     """
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_ANON_KEY")
+    # Strip whitespace/newlines from environment variables
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_key = os.getenv("SUPABASE_ANON_KEY", "").strip()
 
     if not supabase_url or not supabase_key:
         return None
@@ -34,15 +35,16 @@ def get_google_oauth_url() -> Optional[str]:
     Returns:
         OAuth URL string or None if Supabase is not configured
     """
-    supabase_url = os.getenv("SUPABASE_URL")
-    
+    # Strip whitespace/newlines from environment variables
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+
     # Get redirect URL from environment, or try to construct from request
-    redirect_url = os.getenv("SUPABASE_REDIRECT_URL")
-    
+    redirect_url = os.getenv("SUPABASE_REDIRECT_URL", "").strip()
+
     # If not set, try to use RENDER_EXTERNAL_URL or construct from request
     if not redirect_url:
         # On Render, use RENDER_EXTERNAL_URL if available
-        render_url = os.getenv("RENDER_EXTERNAL_URL")
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
         if render_url:
             redirect_url = f"{render_url}/auth/callback"
         else:

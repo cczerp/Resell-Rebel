@@ -321,22 +321,22 @@ def login_google():
     from src.auth_utils import get_google_oauth_url
     from flask import request as flask_request
 
-    # Check if Supabase is configured
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_ANON_KEY")
+    # Check if Supabase is configured (strip whitespace/newlines)
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_key = os.getenv("SUPABASE_ANON_KEY", "").strip()
 
     if not supabase_url or not supabase_key:
         print("Google OAuth Error: SUPABASE_URL or SUPABASE_ANON_KEY not configured")
         flash("Google login is not configured. Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables.", "error")
         return redirect(url_for('auth.login'))
 
-    # Construct callback URL
+    # Construct callback URL (strip whitespace/newlines)
     # Priority: SUPABASE_REDIRECT_URL > RENDER_EXTERNAL_URL > current request
-    redirect_url = os.getenv("SUPABASE_REDIRECT_URL")
+    redirect_url = os.getenv("SUPABASE_REDIRECT_URL", "").strip()
 
     if not redirect_url:
         # Try RENDER_EXTERNAL_URL (for Render deployments)
-        render_url = os.getenv("RENDER_EXTERNAL_URL")
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip()
         if render_url:
             redirect_url = f"{render_url}/auth/callback"
         else:
