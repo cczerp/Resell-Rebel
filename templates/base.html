@@ -61,6 +61,32 @@
             --card-shadow: rgba(0,0,0,0.5);
         }
 
+        /* Dark mode overrides for cards */
+        [data-theme="dark"] .feature-card {
+            background: linear-gradient(145deg, #262626 0%, #1a1a1a 100%);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+
+        [data-theme="dark"] .step-card {
+            background: linear-gradient(145deg, #262626 0%, #1a1a1a 100%);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        [data-theme="dark"] .step-title,
+        [data-theme="dark"] .feature-title {
+            color: #e5e5e5;
+        }
+
+        [data-theme="dark"] .step-text,
+        [data-theme="dark"] .feature-text {
+            color: #a3a3a3;
+        }
+
+        [data-theme="dark"] .benefit-item {
+            background: #262626;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
         .logo {
             font-size: 1.5rem;
             font-weight: bold;
@@ -1194,16 +1220,9 @@
         </div>
 
         <div class="nav-item">
-            <a href="{{ url_for('storage') }}" class="nav-link {% if request.endpoint in ['storage','storage_clothing','storage_map'] %}active{% endif %}">
+            <a href="{{ url_for('storage') }}" class="nav-link {% if request.endpoint in ['storage','storage_clothing','storage_map','cards.cards_collection'] %}active{% endif %}">
                 <i class="fas fa-box"></i>
                 <span>Storage</span>
-            </a>
-        </div>
-
-        <div class="nav-item">
-            <a href="{{ url_for('cards.cards_collection') }}" class="nav-link {% if request.endpoint == 'cards.cards_collection' %}active{% endif %}">
-                <i class="fas fa-layer-group"></i>
-                <span>Cards</span>
             </a>
         </div>
 
