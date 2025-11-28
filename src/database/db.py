@@ -987,10 +987,10 @@ class Database:
                 listing_uuid, user_id, collectible_id, title, description, price,
                 cost, condition, category, item_type, attributes, photos, quantity,
                 storage_location, sku, upc, status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s::integer, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
-            listing_uuid, user_id, collectible_id, title, description, price,
+            listing_uuid, str(user_id), collectible_id, title, description, price,
             cost, condition, category, item_type,
             json.dumps(attributes) if attributes else None,
             json.dumps(photos),
@@ -1025,10 +1025,10 @@ class Database:
         if user_id is not None:
             cursor.execute("""
                 SELECT * FROM listings
-                WHERE status = 'draft' AND user_id = %s
+                WHERE status = 'draft' AND user_id::text = %s::text
                 ORDER BY created_at DESC
                 LIMIT %s
-            """, (user_id, limit))
+            """, (str(user_id), limit))
         else:
             cursor.execute("""
                 SELECT * FROM listings
@@ -1647,7 +1647,7 @@ class Database:
         """Get total activity count for a user"""
         cursor = self._get_cursor()
         cursor.execute("""
-            SELECT COUNT(*) as count FROM activity_logs WHERE user_id = %s
+            SELECT COUNT(*) as count FROM activity_logs WHERE user_id::text = %s::text
         """, (str(user_id),))
         return cursor.fetchone()['count']
 
@@ -1918,13 +1918,13 @@ class Database:
                 SELECT l.*
                 FROM listings l
                 JOIN platform_listings pl ON l.id = pl.listing_id
-                WHERE l.user_id = %s
+                WHERE l.user_id::text = %s::text
                 AND pl.platform = %s
                 AND pl.status IN ('active', 'pending')
                 AND (l.upc = %s OR l.sku = %s)
                 LIMIT 1
             """
-            cursor.execute(query, (user_id, platform, upc or '', sku or ''))
+            cursor.execute(query, (str(user_id), platform, upc or '', sku or ''))
             row = cursor.fetchone()
             if row:
                 return dict(row)
@@ -1933,13 +1933,13 @@ class Database:
             SELECT l.*, pl.platform_listing_id, pl.status as platform_status
             FROM listings l
             JOIN platform_listings pl ON l.id = pl.listing_id
-            WHERE l.user_id = %s
+            WHERE l.user_id::text = %s::text
             AND pl.platform = %s
             AND pl.status IN ('active', 'pending')
             AND LOWER(l.title) LIKE LOWER(%s)
         """
         search_pattern = f"%{title[:50]}%"
-        cursor.execute(query, (user_id, platform, search_pattern))
+        cursor.execute(query, (str(user_id), platform, search_pattern))
         row = cursor.fetchone()
 
         return dict(row) if row else None
@@ -2107,8 +2107,8 @@ class Database:
             FROM storage_items si
             JOIN storage_bins sb ON si.bin_id = sb.id
             LEFT JOIN storage_sections ss ON si.section_id = ss.id
-            WHERE si.user_id = %s AND si.storage_id = %s
-        """, (user_id, storage_id))
+            WHERE si.user_id::text = %s::text AND si.storage_id = %s
+        """, (str(user_id), storage_id))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -2128,9 +2128,9 @@ class Database:
             FROM storage_items si
             JOIN storage_bins sb ON si.bin_id = sb.id
             LEFT JOIN storage_sections ss ON si.section_id = ss.id
-            WHERE si.user_id = %s
+            WHERE si.user_id::text = %s::text
         """
-        params = [user_id]
+        params = [str(user_id)]
 
         if bin_id:
             query += " AND si.bin_id = %s"
@@ -2161,10 +2161,10 @@ class Database:
                 COUNT(DISTINCT ss.id) as section_count
             FROM storage_bins sb
             LEFT JOIN storage_sections ss ON sb.id = ss.bin_id
-            WHERE sb.user_id = %s
+            WHERE sb.user_id::text = %s::text
             GROUP BY sb.id
             ORDER BY sb.bin_type, sb.bin_name
-        """, (user_id,))
+        """, (str(user_id),))
 
         bins = [dict(row) for row in cursor.fetchall()]
 
@@ -2178,8 +2178,8 @@ class Database:
         cursor.execute("""
             SELECT COUNT(*) as total
             FROM storage_items
-            WHERE user_id = %s
-        """, (user_id,))
+            WHERE user_id::text = %s::text
+        """, (str(user_id),))
 
         result = cursor.fetchone()
         total_items = result['total'] if result else 0

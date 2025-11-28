@@ -332,8 +332,6 @@ def api_analyze():
 
         if analysis.get("collectible") or force_enhanced:
             try:
-                from src.database.db import get_db_instance
-                db = get_db_instance()
                 claude = ClaudeCollectibleAnalyzer.from_env()
                 collectible_analysis = claude.deep_analyze_collectible(photos, analysis, db)
             except Exception as e:
