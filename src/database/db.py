@@ -967,7 +967,7 @@ class Database:
         price: float,
         condition: str,
         photos: List[str],
-        user_id: int,
+        user_id,  # Can be UUID string or int
         collectible_id: Optional[int] = None,
         cost: Optional[float] = None,
         category: Optional[str] = None,
@@ -979,18 +979,19 @@ class Database:
         upc: Optional[str] = None,
         status: str = 'draft',
     ) -> int:
-        """Create a new listing"""
+        """Create a new listing - user_id can be UUID or integer"""
         cursor = self._get_cursor()
 
+        # Convert user_id to string to handle both UUID and int
         cursor.execute("""
             INSERT INTO listings (
                 listing_uuid, user_id, collectible_id, title, description, price,
                 cost, condition, category, item_type, attributes, photos, quantity,
                 storage_location, sku, upc, status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s::text::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
-            listing_uuid, user_id, collectible_id, title, description, price,
+            listing_uuid, str(user_id), collectible_id, title, description, price,
             cost, condition, category, item_type,
             json.dumps(attributes) if attributes else None,
             json.dumps(photos),
@@ -1500,8 +1501,8 @@ class Database:
     # USER AUTHENTICATION METHODS
     # ========================================================================
 
-    def create_user(self, username: str, email: str, password_hash: str) -> int:
-        """Create a new user"""
+    def create_user(self, username: str, email: str, password_hash: str):
+        """Create a new user - returns UUID string"""
         cursor = self._get_cursor()
         cursor.execute("""
             INSERT INTO users (username, email, password_hash)
@@ -1510,7 +1511,7 @@ class Database:
         """, (username, email, password_hash))
         result = cursor.fetchone()
         self.conn.commit()
-        return result['id']
+        return str(result['id'])  # Return UUID as string
 
     def get_user_by_username(self, username: str) -> Optional[Dict]:
         """Get user by username"""
@@ -1526,20 +1527,25 @@ class Database:
         row = cursor.fetchone()
         return dict(row) if row else None
 
-    def get_user_by_id(self, user_id: int) -> Optional[Dict]:
-        """Get user by ID"""
+    def get_user_by_id(self, user_id) -> Optional[Dict]:
+        """Get user by ID (UUID string or int)"""
         cursor = self._get_cursor()
-        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT * FROM users WHERE id::text = %s::text", (str(user_id),))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if row:
+            result = dict(row)
+            # Ensure id is returned as string for consistency
+            result['id'] = str(result['id'])
+            return result
+        return None
 
-    def update_last_login(self, user_id: int):
+    def update_last_login(self, user_id):
         """Update user's last login timestamp"""
         cursor = self._get_cursor()
         cursor.execute("""
             UPDATE users
             SET last_login = CURRENT_TIMESTAMP
-            WHERE id = %s
+            WHERE id::text = %s::text
         """, (str(user_id),))
         self.conn.commit()
 
@@ -1589,19 +1595,19 @@ class Database:
     # MARKETPLACE CREDENTIALS METHODS
     # ========================================================================
 
-    def save_marketplace_credentials(self, user_id: int, platform: str, username: str, password: str):
-        """Save or update marketplace credentials"""
+    def save_marketplace_credentials(self, user_id, platform: str, username: str, password: str):
+        """Save or update marketplace credentials - user_id can be UUID or int"""
         cursor = self._get_cursor()
 
         cursor.execute("""
             INSERT INTO marketplace_credentials
             (user_id, platform, username, password, updated_at)
-            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+            VALUES (%s::text::uuid, %s, %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (user_id, platform) DO UPDATE SET
                 username = EXCLUDED.username,
                 password = EXCLUDED.password,
                 updated_at = CURRENT_TIMESTAMP
-        """, (user_id, platform, username, password))
+        """, (str(user_id), platform, username, password))
 
         self.conn.commit()
 

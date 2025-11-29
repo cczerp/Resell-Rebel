@@ -106,20 +106,9 @@ login_manager.login_message = 'Please log in to access this page.'
 def load_user(user_id):
     """Load user for Flask-Login"""
     try:
-        # Handle different user_id types (int, str, etc.)
-        if isinstance(user_id, str):
-            # Try to convert to int if it's a numeric string
-            try:
-                user_id = int(user_id)
-            except ValueError:
-                return None
-        elif not isinstance(user_id, int):
-            # If it's already an int or other type, try to use it directly
-            try:
-                user_id = int(user_id)
-            except (ValueError, TypeError):
-                return None
-        
+        # Keep user_id as string (UUID from Supabase)
+        # Don't convert to int - users.id is UUID in Supabase
+        user_id = str(user_id)
         return User.get(user_id)
     except Exception as e:
         print(f"Error loading user: {e}")
