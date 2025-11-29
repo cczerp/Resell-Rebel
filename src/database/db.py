@@ -1134,6 +1134,47 @@ class Database:
         cursor.execute(query, values)
         self.conn.commit()
 
+    def get_listing_by_sku(self, sku: str) -> Optional[Dict]:
+        """Get a listing by SKU"""
+        cursor = self._get_cursor()
+        cursor.execute("SELECT * FROM listings WHERE sku = %s LIMIT 1", (sku,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_listing_by_upc(self, upc: str) -> Optional[Dict]:
+        """Get a listing by UPC"""
+        cursor = self._get_cursor()
+        cursor.execute("SELECT * FROM listings WHERE upc = %s LIMIT 1", (upc,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def search_listings_by_title(
+        self,
+        user_id: int,
+        title_query: str,
+        threshold: float = 0.8
+    ) -> List[Dict]:
+        """
+        Search listings by title (fuzzy match)
+
+        Args:
+            user_id: User ID
+            title_query: Title search query
+            threshold: Similarity threshold (0.0-1.0)
+
+        Returns:
+            List of matching listings
+        """
+        cursor = self._get_cursor()
+        cursor.execute("""
+            SELECT * FROM listings
+            WHERE user_id::text = %s::text
+            AND LOWER(title) LIKE LOWER(%s)
+            ORDER BY created_at DESC
+            LIMIT 10
+        """, (str(user_id), f"%{title_query}%"))
+        return [dict(row) for row in cursor.fetchall()]
+
     def mark_listing_sold(
         self,
         listing_id: int,
