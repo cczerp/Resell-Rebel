@@ -108,14 +108,36 @@ login_manager.login_message = 'Please log in to access this page.'
 
 @login_manager.user_loader
 def load_user(user_id):
-    """Load user for Flask-Login"""
+    """Load user for Flask-Login - with timeout protection"""
     try:
         # Keep user_id as string (UUID from Supabase)
         # Don't convert to int - users.id is UUID in Supabase
         user_id = str(user_id)
-        return User.get(user_id)
+
+        # Try to load user with a reasonable timeout
+        # If database is slow/failing, return None quickly instead of blocking
+        import signal
+
+        def timeout_handler(signum, frame):
+            raise TimeoutError("User load timeout")
+
+        # Set 2-second timeout for user loading
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(2)
+
+        try:
+            user = User.get(user_id)
+            signal.alarm(0)  # Cancel alarm
+            signal.signal(signal.SIGALRM, old_handler)  # Restore old handler
+            return user
+        except TimeoutError:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+            print(f"⚠️  User load timeout for {user_id} - database too slow", flush=True)
+            return None
+
     except Exception as e:
-        print(f"Error loading user: {e}")
+        print(f"Error loading user: {e}", flush=True)
         return None
 
 # ============================================================================

@@ -160,14 +160,17 @@ class Database:
         try:
             # Test if connection is alive
             if self.conn is None or self.conn.closed:
-                print("⚠️  Connection lost, reconnecting...")
+                print("⚠️  Connection lost, reconnecting...", flush=True)
                 self._connect()
                 return
 
-            # Test with a simple query
+            # Test with a simple query (with short timeout)
             cursor = self.conn.cursor()
             try:
+                # Set statement timeout to 1 second for the health check
+                cursor.execute("SET statement_timeout = 1000")  # 1 second
                 cursor.execute("SELECT 1")
+                cursor.execute("SET statement_timeout = 0")  # Reset to no timeout
                 cursor.close()
             except psycopg2.errors.InFailedSqlTransaction:
                 # Transaction is in failed state, rollback and retry
@@ -175,10 +178,19 @@ class Database:
                 cursor = self.conn.cursor()
                 cursor.execute("SELECT 1")
                 cursor.close()
+            except psycopg2.errors.QueryCanceled:
+                # Health check timed out - connection is too slow
+                print("⚠️  Connection health check timeout - reconnecting...", flush=True)
+                self._connect()
 
         except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-            print(f"⚠️  Connection error detected: {e}, reconnecting...")
-            self._connect()
+            print(f"⚠️  Connection error detected: {e}, reconnecting...", flush=True)
+            try:
+                self._connect()
+            except Exception as reconnect_error:
+                # If reconnection fails, log but don't crash
+                print(f"❌ Reconnection failed: {reconnect_error}", flush=True)
+                raise
 
     def _get_cursor(self):
         """Get PostgreSQL cursor with RealDictCursor for dict-like row access"""
