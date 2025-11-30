@@ -186,9 +186,12 @@ def index():
         return render_template('index.html')
 
 @app.route('/create')
+@login_required
 def create_listing():
     """Create new listing page"""
-    return render_template('create.html')
+    from flask import request
+    draft_id = request.args.get('draft_id', type=int)
+    return render_template('create.html', draft_id=draft_id)
 
 @app.route('/drafts')
 @login_required

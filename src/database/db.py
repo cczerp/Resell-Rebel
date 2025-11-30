@@ -692,6 +692,32 @@ class Database:
             ON users(is_admin)
         """)
 
+        # Mobile app tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS inventory (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                storage_location TEXT,
+                photos TEXT,  -- JSON array of photo objects
+                barcode TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS templates (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                brand TEXT,
+                size TEXT,
+                color TEXT,
+                condition TEXT DEFAULT 'good',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         self.conn.commit()
         print("✅ PostgreSQL tables created successfully")
 
@@ -1261,6 +1287,96 @@ class Database:
         """, (platform, listing_id))
 
         self.conn.commit()
+
+    # ========================================================================
+    # SKU SYSTEM METHODS
+    # ========================================================================
+
+    def generate_auto_sku(self, user_id: int, prefix: str = "RR") -> str:
+        """Generate an auto SKU for a user"""
+        cursor = self._get_cursor()
+
+        # Get the next SKU number for this user
+        cursor.execute("""
+            SELECT COUNT(*) as sku_count FROM listings
+            WHERE user_id::text = %s::text AND sku LIKE %s
+        """, (str(user_id), f"{prefix}%"))
+
+        result = cursor.fetchone()
+        next_number = result['sku_count'] + 1
+
+        # Format as RR00001, RR00002, etc.
+        sku = f"{prefix}{next_number:05d}"
+
+        # Ensure uniqueness (in case of concurrent requests)
+        while self.get_listing_by_sku(sku):
+            next_number += 1
+            sku = f"{prefix}{next_number:05d}"
+
+        return sku
+
+    def assign_auto_sku_if_missing(self, listing_id: int, user_id: int, prefix: str = "RR"):
+        """Assign an auto-generated SKU to a listing if it doesn't have one"""
+        cursor = self._get_cursor()
+
+        # Check if listing already has a SKU
+        cursor.execute("SELECT sku FROM listings WHERE id = %s", (listing_id,))
+        result = cursor.fetchone()
+
+        if result and result['sku']:
+            return result['sku']  # Already has SKU
+
+        # Generate and assign new SKU
+        sku = self.generate_auto_sku(user_id, prefix)
+
+        cursor.execute("""
+            UPDATE listings SET sku = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """, (sku, listing_id))
+
+        self.conn.commit()
+        return sku
+
+    def get_sku_settings(self, user_id: int) -> Dict:
+        """Get SKU settings for a user (placeholder for future customization)"""
+        # For now, return default settings
+        return {
+            'auto_generate': True,
+            'prefix': 'RR',
+            'pattern': '{prefix}{number:05d}'
+        }
+
+    def update_sku_settings(self, user_id: int, settings: Dict):
+        """Update SKU settings for a user (placeholder for future implementation)"""
+        # TODO: Store user-specific SKU settings in database
+        pass
+
+    def search_by_sku(self, user_id: int, sku_query: str) -> List[Dict]:
+        """Search listings by SKU"""
+        cursor = self._get_cursor()
+        cursor.execute("""
+            SELECT * FROM listings
+            WHERE user_id::text = %s::text AND sku ILIKE %s
+            ORDER BY created_at DESC
+        """, (str(user_id), f"%{sku_query}%"))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def validate_sku_uniqueness(self, sku: str, exclude_listing_id: Optional[int] = None) -> bool:
+        """Check if SKU is unique across all listings"""
+        cursor = self._get_cursor()
+
+        if exclude_listing_id:
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM listings
+                WHERE sku = %s AND id != %s
+            """, (sku, exclude_listing_id))
+        else:
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM listings WHERE sku = %s
+            """, (sku,))
+
+        result = cursor.fetchone()
+        return result['count'] == 0
 
     # ========================================================================
     # PLATFORM LISTINGS METHODS
