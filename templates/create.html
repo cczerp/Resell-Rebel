@@ -848,7 +848,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
     const timeout = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
     try {
-        // Try card analysis first
+        // Try card analysis first - now returns job_id
         const cardResponse = await fetch('/api/analyze-card', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -864,13 +864,17 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
             throw new Error(`Card analysis failed: ${cardResponse.statusText}`);
         }
 
-        const cardData = await cardResponse.json();
+        const cardJob = await cardResponse.json();
+        
+        // If job_id is returned, poll for results
+        if (cardJob.job_id) {
+            const cardData = await pollJobStatus('/api/analyze-card-status/' + cardJob.job_id, 60);
+            
+            // Log response for debugging
+            console.log('Card analysis response:', cardData);
 
-        // Log response for debugging
-        console.log('Card analysis response:', cardData);
-
-        // Check if it's a card
-        if (cardData.success && cardData.card_data && cardData.card_data.is_card) {
+            // Check if it's a card
+            if (cardData.success && cardData.card_data && cardData.card_data.is_card) {
             // Store card data for later
             detectedCardData = cardData.card_data;
 
@@ -912,17 +916,21 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
                 throw new Error(`Analysis failed: ${response.statusText}`);
             }
 
-            const data = await response.json();
+            const jobResponse = await response.json();
+            
+            // If job_id is returned, poll for results
+            if (jobResponse.job_id) {
+                const data = await pollJobStatus('/api/analyze-status/' + jobResponse.job_id, 90);
+                
+                // Log response for debugging
+                console.log('General analysis response:', data);
 
-            // Log response for debugging
-            console.log('General analysis response:', data);
-
-            if (data.success) {
-                const analysis = data.analysis;
+                if (data.result && data.result.success) {
+                    const analysis = data.result.analysis;
 
                 // Store enhanced analysis if available
-                if (data.collectible_analysis) {
-                    enhancedAnalysisData = data.collectible_analysis;
+                if (data.result && data.result.collectible_analysis) {
+                    enhancedAnalysisData = data.result.collectible_analysis;
                 }
 
                 // Fill form
@@ -1006,12 +1014,20 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
                 }
 
                 showAlert('AI analysis complete!', 'success');
+                } else {
+                    // Show detailed error message
+                    const errorMsg = (data.result && data.result.error) || data.error || 'Unknown error occurred';
+                    const errorDetails = (data.result && data.result.details) ? ' - ' + data.result.details : '';
+                    console.error('Analysis error:', errorMsg, errorDetails);
+                    showAlert('AI analysis error: ' + errorMsg + errorDetails, 'danger');
+                }
             } else {
-                // Show detailed error message
-                const errorMsg = data.error || 'Unknown error occurred';
-                const errorDetails = data.details ? ' - ' + data.details : '';
-                console.error('Analysis error:', errorMsg, errorDetails);
-                showAlert('AI analysis error: ' + errorMsg + errorDetails, 'danger');
+                // Legacy response format (shouldn't happen with new API)
+                const data = jobResponse;
+                if (data.success) {
+                    const analysis = data.analysis;
+                    // ... handle legacy format
+                }
             }
         }
     } catch (error) {
@@ -1033,6 +1049,42 @@ function getDemandEmoji(demand) {
     if (demand === 'High') return '🔥';
     if (demand === 'Low') return '🐌';
     return '📈';
+}
+
+// Poll job status until complete or failed
+async function pollJobStatus(statusUrl, maxSeconds = 60) {
+    const startTime = Date.now();
+    const maxTime = maxSeconds * 1000;
+    const pollInterval = 2000; // Poll every 2 seconds
+    
+    while (Date.now() - startTime < maxTime) {
+        try {
+            const response = await fetch(statusUrl);
+            if (!response.ok) {
+                throw new Error(`Status check failed: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.status === 'completed') {
+                return data;
+            } else if (data.status === 'failed') {
+                throw new Error(data.error || 'Job failed');
+            } else if (data.status === 'processing' || data.status === 'pending') {
+                // Still processing, wait and poll again
+                await new Promise(resolve => setTimeout(resolve, pollInterval));
+                continue;
+            }
+        } catch (error) {
+            if (error.message.includes('Job failed') || error.message.includes('failed')) {
+                throw error;
+            }
+            // Network error, retry
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+    }
+    
+    throw new Error('Job timed out after ' + maxSeconds + ' seconds');
 }
 
 // ========================================
@@ -1071,28 +1123,51 @@ document.getElementById('enhancedAnalyzerBtn').addEventListener('click', async f
                 throw new Error(`Enhanced analysis failed: ${response.statusText}`);
             }
 
-            const data = await response.json();
-
-            if (data.success) {
-                if (data.collectible_analysis && !data.collectible_analysis.error) {
-                    enhancedAnalysisData = data.collectible_analysis;
-                    showAlert('Enhanced analysis complete!', 'success');
-                } else if (data.collectible_analysis && data.collectible_analysis.error) {
-                    showAlert('Enhanced analysis failed: ' + data.collectible_analysis.error, 'danger');
+            const jobResponse = await response.json();
+            
+            // If job_id is returned, poll for results
+            if (jobResponse.job_id) {
+                const data = await pollJobStatus('/api/analyze-status/' + jobResponse.job_id, 120);
+                
+                if (data.result && data.result.success) {
+                    if (data.result.collectible_analysis && !data.result.collectible_analysis.error) {
+                        enhancedAnalysisData = data.result.collectible_analysis;
+                        showAlert('Enhanced analysis complete!', 'success');
+                    } else if (data.result.collectible_analysis && data.result.collectible_analysis.error) {
+                        showAlert('Enhanced analysis failed: ' + data.result.collectible_analysis.error, 'danger');
+                        return;
+                    } else {
+                        showAlert('Enhanced analysis not available for this item. This feature works best with collectibles, trading cards, and sports memorabilia.', 'warning');
+                        return;
+                    }
+                } else if (data.error || (data.result && data.result.error)) {
+                    showAlert('Enhanced analysis failed: ' + (data.error || data.result.error), 'danger');
                     return;
                 } else {
                     showAlert('Enhanced analysis not available for this item. This feature works best with collectibles, trading cards, and sports memorabilia.', 'warning');
                     return;
                 }
-            } else if (data.error) {
-                showAlert('Enhanced analysis failed: ' + data.error, 'danger');
-                return;
             } else {
-                showAlert('Enhanced analysis not available for this item. This feature works best with collectibles, trading cards, and sports memorabilia.', 'warning');
-                enhancedBtn.disabled = false;
-                enhancedBtn.innerHTML = originalText;
-                hideLoading();
-                return;
+                // Legacy format
+                const data = jobResponse;
+                if (data.success) {
+                    if (data.collectible_analysis && !data.collectible_analysis.error) {
+                        enhancedAnalysisData = data.collectible_analysis;
+                        showAlert('Enhanced analysis complete!', 'success');
+                    } else {
+                        showAlert('Enhanced analysis not available for this item.', 'warning');
+                        return;
+                    }
+                } else if (data.error) {
+                    showAlert('Enhanced analysis failed: ' + data.error, 'danger');
+                    return;
+                } else {
+                    showAlert('Enhanced analysis not available for this item. This feature works best with collectibles, trading cards, and sports memorabilia.', 'warning');
+                    enhancedBtn.disabled = false;
+                    enhancedBtn.innerHTML = originalText;
+                    hideLoading();
+                    return;
+                }
             }
         } catch (error) {
             if (error.name === 'AbortError') {

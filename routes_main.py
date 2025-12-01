@@ -244,8 +244,9 @@ def cards_collection():
 
 @main_bp.route("/api/analyze-card", methods=["POST"])
 def api_analyze_card():
+    """Analyze card photos - returns job_id immediately, use /api/analyze-card-status/<job_id> to poll"""
     try:
-        from src.ai.gemini_classifier import analyze_card
+        from src.workers.job_manager import get_job_manager
         from src.schema.unified_listing import Photo
 
         data = request.get_json()
@@ -253,36 +254,82 @@ def api_analyze_card():
         if not paths:
             return jsonify({"error": "No photos provided"}), 400
 
-        photos = [Photo(url="", local_path=p) for p in paths]
-        result = analyze_card(photos)
+        # Create background job
+        job_manager = get_job_manager()
+        job_id = job_manager.create_job("analyze_card", {
+            "photo_paths": paths
+        })
 
-        # Check for API key errors
-        if result.get("error"):
-            error_msg = result.get("error", "Unknown error")
-            print(f"Card analysis error: {error_msg}")  # Debug logging
-            if "API" in error_msg or "api_key" in error_msg.lower():
-                return jsonify({
-                    "error": "AI service not configured. Please check your GEMINI_API_KEY environment variable.",
-                    "details": error_msg
-                }), 503
-            return jsonify(result), 500
+        # Start processing in background
+        def card_analyze_worker(job_data):
+            from src.ai.gemini_classifier import analyze_card
+            
+            paths = job_data["photo_paths"]
+            photos = [Photo(url="", local_path=p) for p in paths]
+            result = analyze_card(photos)
 
-        return jsonify({"success": True, "card_data": result})
+            # Check for API key errors
+            if result.get("error"):
+                error_msg = result.get("error", "Unknown error")
+                if "API" in error_msg or "api_key" in error_msg.lower():
+                    return {
+                        "success": False,
+                        "card_data": None,
+                        "error": "AI service not configured. Please check your GEMINI_API_KEY environment variable.",
+                        "details": error_msg
+                    }
+                return {
+                    "success": False,
+                    "card_data": None,
+                    "error": error_msg
+                }
 
-    except ValueError as e:
-        # Catch API key not set errors
-        error_msg = str(e)
-        print(f"Card analysis ValueError: {error_msg}")  # Debug logging
-        if "API_KEY" in error_msg:
-            return jsonify({
-                "error": "AI service not configured. Please set GEMINI_API_KEY environment variable.",
-                "details": error_msg
-            }), 503
-        return jsonify({"error": error_msg}), 500
+            return {
+                "success": True,
+                "card_data": result
+            }
+
+        job_manager.start_job(job_id, card_analyze_worker)
+
+        return jsonify({
+            "success": True,
+            "job_id": job_id,
+            "status": "pending",
+            "message": "Card analysis started. Poll /api/analyze-card-status/" + job_id + " for results."
+        })
+
     except Exception as e:
-        print(f"Card analysis exception: {str(e)}")  # Debug logging
+        print(f"Error creating card analysis job: {e}")
         import traceback
-        traceback.print_exc()  # Print full stack trace for debugging
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route("/api/analyze-card-status/<job_id>", methods=["GET"])
+def api_analyze_card_status(job_id):
+    """Get card analysis job status and results"""
+    try:
+        from src.workers.job_manager import get_job_manager
+        
+        job_manager = get_job_manager()
+        job = job_manager.get_job(job_id)
+        
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+        
+        response = {
+            "job_id": job_id,
+            "status": job["status"],
+        }
+        
+        if job["status"] == "completed":
+            response.update(job["result"])
+        elif job["status"] == "failed":
+            response["error"] = job["error"]
+        
+        return jsonify(response)
+    
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
@@ -293,10 +340,9 @@ def api_analyze_card():
 
 @main_bp.route("/api/analyze", methods=["POST"])
 def api_analyze():
-    """Analyze item photos using Gemini (fast) and optionally Claude for deep collectible analysis."""
+    """Analyze item photos - returns job_id immediately, use /api/analyze-status/<job_id> to poll"""
     try:
-        from src.ai.gemini_classifier import GeminiClassifier
-        from src.ai.claude_collectible_analyzer import ClaudeCollectibleAnalyzer
+        from src.workers.job_manager import get_job_manager
         from src.schema.unified_listing import Photo
 
         data = request.get_json() or {}
@@ -305,58 +351,91 @@ def api_analyze():
         if not photo_paths:
             return jsonify({"error": "No photos provided"}), 400
 
-        photos = [Photo(url="", local_path=p) for p in photo_paths]
+        # Create background job
+        job_manager = get_job_manager()
+        job_id = job_manager.create_job("analyze", {
+            "photo_paths": photo_paths,
+            "force_enhanced": data.get("force_enhanced", False)
+        })
 
-        # Run fast classification
-        try:
+        # Start processing in background
+        def analyze_worker(job_data):
+            from src.ai.gemini_classifier import GeminiClassifier
+            from src.ai.claude_collectible_analyzer import ClaudeCollectibleAnalyzer
+            
+            photo_paths = job_data["photo_paths"]
+            force_enhanced = job_data.get("force_enhanced", False)
+            photos = [Photo(url="", local_path=p) for p in photo_paths]
+
+            # Run fast classification
             classifier = GeminiClassifier()
             analysis = classifier.analyze_item(photos)
-        except ValueError as e:
-            # Handle missing API key
-            error_msg = str(e)
-            if "API_KEY" in error_msg:
-                return jsonify({
-                    "error": "AI service not configured. Please set GEMINI_API_KEY environment variable.",
-                    "details": error_msg
-                }), 503
-            return jsonify({"error": f"Analyzer init failed: {e}"}), 500
-        except Exception as e:
-            return jsonify({"error": f"Analyzer init failed: {e}"}), 500
 
-        # Check if analysis returned an error
-        if analysis.get("error"):
-            error_msg = analysis.get("error", "Unknown error")
-            # Check for rate limit errors
-            if analysis.get("error_type") == "rate_limit":
-                return jsonify({
+            # Check for errors
+            if analysis.get("error"):
+                return {
                     "success": False,
-                    "error": error_msg,
-                    "retry_after": analysis.get("retry_after", 60)
-                }), 429
-            # Other errors
-            return jsonify({"success": False, "error": error_msg}), 500
+                    "analysis": None,
+                    "collectible_analysis": None,
+                    "error": analysis.get("error", "Unknown error"),
+                    "error_type": analysis.get("error_type")
+                }
 
-        # If it's marked collectible OR force_enhanced is requested, run deep Claude analysis
-        collectible_analysis = None
-        force_enhanced = data.get("force_enhanced", False)
+            # Deep analysis if needed
+            collectible_analysis = None
+            if analysis.get("collectible") or force_enhanced:
+                try:
+                    claude = ClaudeCollectibleAnalyzer.from_env()
+                    collectible_analysis = claude.deep_analyze_collectible(photos, analysis, db)
+                except Exception as e:
+                    collectible_analysis = {"error": str(e)}
 
-        if analysis.get("collectible") or force_enhanced:
-            try:
-                claude = ClaudeCollectibleAnalyzer.from_env()
-                collectible_analysis = claude.deep_analyze_collectible(photos, analysis, db)
-            except Exception as e:
-                # Don't fail the whole request for deep analysis errors
-                print(f"Enhanced analysis error: {e}")
-                collectible_analysis = {"error": str(e)}
+            return {
+                "success": True,
+                "analysis": analysis,
+                "collectible_analysis": collectible_analysis,
+            }
 
-        response = {
+        job_manager.start_job(job_id, analyze_worker)
+
+        return jsonify({
             "success": True,
-            "analysis": analysis,
-            "collectible_analysis": collectible_analysis,
+            "job_id": job_id,
+            "status": "pending",
+            "message": "Analysis started. Poll /api/analyze-status/" + job_id + " for results."
+        })
+
+    except Exception as e:
+        print(f"Error creating analysis job: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@main_bp.route("/api/analyze-status/<job_id>", methods=["GET"])
+def api_analyze_status(job_id):
+    """Get analysis job status and results"""
+    try:
+        from src.workers.job_manager import get_job_manager
+        
+        job_manager = get_job_manager()
+        job = job_manager.get_job(job_id)
+        
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+        
+        response = {
+            "job_id": job_id,
+            "status": job["status"],
         }
-
+        
+        if job["status"] == "completed":
+            response["result"] = job["result"]
+        elif job["status"] == "failed":
+            response["error"] = job["error"]
+        
         return jsonify(response)
-
+    
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
