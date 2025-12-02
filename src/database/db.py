@@ -1828,6 +1828,8 @@ class Database:
                 cursor = self._get_cursor()
                 cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
                 row = cursor.fetchone()
+                # Commit to close transaction (no-op for SELECT but prevents hanging)
+                self.conn.commit()
                 return dict(row) if row else None
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
                 if attempt < max_retries - 1:
@@ -1858,6 +1860,8 @@ class Database:
                 cursor = self._get_cursor()
                 cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
                 row = cursor.fetchone()
+                # Commit to close transaction (no-op for SELECT but prevents hanging)
+                self.conn.commit()
                 return dict(row) if row else None
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
                 if attempt < max_retries - 1:
@@ -1888,11 +1892,14 @@ class Database:
                 user_id_str = str(user_id) if user_id else None
                 if not user_id_str:
                     return None
-                
+
                 cursor = self._get_cursor()
                 cursor.execute("SELECT * FROM users WHERE id::text = %s", (user_id_str,))
                 row = cursor.fetchone()
-                
+
+                # Commit to close transaction (no-op for SELECT but prevents hanging)
+                self.conn.commit()
+
                 if row:
                     result = dict(row)
                     # Ensure id is returned as string UUID
@@ -1961,6 +1968,8 @@ class Database:
             cursor = self._get_cursor()
             cursor.execute("SELECT * FROM users WHERE supabase_uid = %s", (supabase_uid,))
             row = cursor.fetchone()
+            # Commit to close transaction (no-op for SELECT but prevents hanging)
+            self.conn.commit()
             return dict(row) if row else None
         finally:
             if cursor:
