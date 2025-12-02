@@ -1399,69 +1399,72 @@ def api_get_inventory():
 
         # Execute query
         cursor = db._get_cursor()
-        cursor.execute(query, params)
-        listings = [dict(row) for row in cursor.fetchall()]
+        try:
+            cursor.execute(query, params)
+            listings = [dict(row) for row in cursor.fetchall()]
 
-        # Get total count for pagination
-        count_query = """
-            SELECT COUNT(DISTINCT l.id) as total
-            FROM listings l
-            LEFT JOIN platform_listings ps ON l.id = ps.listing_id
-            LEFT JOIN platforms p ON ps.platform_id = p.id
-            WHERE l.user_id::text = %s::text
-        """
-        count_params = [str(current_user.id)]
+            # Get total count for pagination
+            count_query = """
+                SELECT COUNT(DISTINCT l.id) as total
+                FROM listings l
+                LEFT JOIN platform_listings ps ON l.id = ps.listing_id
+                LEFT JOIN platforms p ON ps.platform_id = p.id
+                WHERE l.user_id::text = %s::text
+            """
+            count_params = [str(current_user.id)]
 
-        # Apply same filters for count
-        if status_filter != 'all':
-            count_query += " AND l.status = %s"
-            count_params.append(status_filter)
-        if category_filter != 'all':
-            count_query += " AND l.category ILIKE %s"
-            count_params.append(f"%{category_filter}%")
-        if platform_filter != 'all':
-            count_query += " AND p.name = %s"
-            count_params.append(platform_filter)
-        if search_query:
-            count_query += """ AND (
-                l.title ILIKE %s OR
-                l.description ILIKE %s OR
-                l.sku ILIKE %s OR
-                l.upc ILIKE %s
-            )"""
-            search_param = f"%{search_query}%"
-            count_params.extend([search_param] * 4)
+            # Apply same filters for count
+            if status_filter != 'all':
+                count_query += " AND l.status = %s"
+                count_params.append(status_filter)
+            if category_filter != 'all':
+                count_query += " AND l.category ILIKE %s"
+                count_params.append(f"%{category_filter}%")
+            if platform_filter != 'all':
+                count_query += " AND p.name = %s"
+                count_params.append(platform_filter)
+            if search_query:
+                count_query += """ AND (
+                    l.title ILIKE %s OR
+                    l.description ILIKE %s OR
+                    l.sku ILIKE %s OR
+                    l.upc ILIKE %s
+                )"""
+                search_param = f"%{search_query}%"
+                count_params.extend([search_param] * 4)
 
-        cursor.execute(count_query, count_params)
-        total_count = cursor.fetchone()['total']
+            cursor.execute(count_query, count_params)
+            total_count = cursor.fetchone()['total']
 
-        # Get summary stats
-        stats_query = """
-            SELECT
-                COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_count,
-                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
-                COUNT(CASE WHEN status = 'sold' THEN 1 END) as sold_count,
-                COUNT(CASE WHEN status = 'shipped' THEN 1 END) as shipped_count,
-                COUNT(CASE WHEN status = 'archived' THEN 1 END) as archived_count,
-                COUNT(*) as total_count,
-                COALESCE(SUM(CASE WHEN status IN ('sold', 'shipped') THEN price ELSE 0 END), 0) as total_value
-            FROM listings
-            WHERE user_id::text = %s::text
-        """
-        cursor.execute(stats_query, (str(current_user.id),))
-        stats = dict(cursor.fetchone())
+            # Get summary stats
+            stats_query = """
+                SELECT
+                    COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_count,
+                    COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
+                    COUNT(CASE WHEN status = 'sold' THEN 1 END) as sold_count,
+                    COUNT(CASE WHEN status = 'shipped' THEN 1 END) as shipped_count,
+                    COUNT(CASE WHEN status = 'archived' THEN 1 END) as archived_count,
+                    COUNT(*) as total_count,
+                    COALESCE(SUM(CASE WHEN status IN ('sold', 'shipped') THEN price ELSE 0 END), 0) as total_value
+                FROM listings
+                WHERE user_id::text = %s::text
+            """
+            cursor.execute(stats_query, (str(current_user.id),))
+            stats = dict(cursor.fetchone())
 
-        return jsonify({
-            'success': True,
-            'listings': listings,
-            'stats': stats,
-            'pagination': {
-                'page': page,
-                'per_page': per_page,
-                'total': total_count,
-                'pages': (total_count + per_page - 1) // per_page
-            }
-        })
+            return jsonify({
+                'success': True,
+                'listings': listings,
+                'stats': stats,
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': total_count,
+                    'pages': (total_count + per_page - 1) // per_page
+                }
+            })
+        finally:
+            cursor.close()
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
