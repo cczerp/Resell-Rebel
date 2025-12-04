@@ -219,13 +219,20 @@ class Database:
             self.conn.autocommit = True
             print(f"✅ Connection configured: autocommit=True", flush=True)
 
-            # Set statement timeout to prevent queries from blocking forever (30 second timeout)
-            with self.conn.cursor() as cur:
-                cur.execute("SET statement_timeout = '30s'")
-            print(f"✅ Statement timeout set to 30s", flush=True)
         except Exception as e:
             print(f"❌ Failed to get connection from pool: {e}", flush=True)
             raise
+
+        # Set statement timeout to prevent queries from blocking forever (30 second timeout)
+        # This is a safety feature - if it fails, we continue anyway
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SET statement_timeout = '30s'")
+            cur.close()
+            print(f"✅ Statement timeout set to 30s", flush=True)
+        except Exception as timeout_err:
+            # Non-critical - log warning but continue
+            print(f"⚠️  Could not set statement timeout (non-critical): {timeout_err}", flush=True)
 
     def _get_cursor(self, retries=3):
         """Get PostgreSQL cursor from self.conn - returns cursor only (not tuple)"""
