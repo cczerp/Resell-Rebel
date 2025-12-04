@@ -1844,7 +1844,6 @@ class Database:
         max_retries = 3
         for attempt in range(max_retries):
             cursor = None
-            conn = None
             try:
                 cursor = self._get_cursor()
                 cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
@@ -1853,14 +1852,21 @@ class Database:
                 self._commit_read()  # Close transaction after read
                 return result
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                print(f"⚠️  Database connection error in get_user_by_username (attempt {attempt + 1}/{max_retries}): {e}")
+                # Force a fresh connection on retry
                 if attempt < max_retries - 1:
-                    print(f"⚠️  Database connection error in get_user_by_username (attempt {attempt + 1}/{max_retries}), retrying...")
+                    try:
+                        self._get_connection_from_pool()
+                    except Exception as reconnect_error:
+                        print(f"Failed to reconnect: {reconnect_error}")
                     time.sleep(0.5 * (attempt + 1))
                 else:
-                    print(f"❌ Failed to get user by username after {max_retries} attempts: {e}")
+                    print(f"❌ Failed to get user by username after {max_retries} attempts")
                     return None
             except Exception as e:
                 print(f"Unexpected error in get_user_by_username: {e}")
+                import traceback
+                traceback.print_exc()
                 return None
             finally:
                 if cursor:
@@ -1868,15 +1874,12 @@ class Database:
                         cursor.close()
                     except:
                         pass
-                if conn:
-                    self._return_connection(conn, commit=False, error=False)
 
     def get_user_by_email(self, email: str) -> Optional[Dict]:
         """Get user by email with retry logic"""
         max_retries = 3
         for attempt in range(max_retries):
             cursor = None
-            conn = None
             try:
                 cursor = self._get_cursor()
                 cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
@@ -1885,14 +1888,21 @@ class Database:
                 self._commit_read()  # Close transaction after read
                 return result
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                print(f"⚠️  Database connection error in get_user_by_email (attempt {attempt + 1}/{max_retries}): {e}")
+                # Force a fresh connection on retry
                 if attempt < max_retries - 1:
-                    print(f"⚠️  Database connection error in get_user_by_email (attempt {attempt + 1}/{max_retries}), retrying...")
+                    try:
+                        self._get_connection_from_pool()
+                    except Exception as reconnect_error:
+                        print(f"Failed to reconnect: {reconnect_error}")
                     time.sleep(0.5 * (attempt + 1))
                 else:
-                    print(f"❌ Failed to get user by email after {max_retries} attempts: {e}")
+                    print(f"❌ Failed to get user by email after {max_retries} attempts")
                     return None
             except Exception as e:
                 print(f"Unexpected error in get_user_by_email: {e}")
+                import traceback
+                traceback.print_exc()
                 return None
             finally:
                 if cursor:
@@ -1900,8 +1910,6 @@ class Database:
                         cursor.close()
                     except:
                         pass
-                if conn:
-                    self._return_connection(conn, commit=False, error=False)
 
     def get_user_by_id(self, user_id) -> Optional[Dict]:
         """Get user by ID (UUID) with retry logic for connection issues"""
@@ -1927,17 +1935,24 @@ class Database:
                 self._commit_read()  # Close transaction even if no result
                 return None
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                print(f"⚠️  Database connection error in get_user_by_id (attempt {attempt + 1}/{max_retries}): {e}")
+                # Force a fresh connection on retry
                 if attempt < max_retries - 1:
-                    print(f"⚠️  Database connection error in get_user_by_id (attempt {attempt + 1}/{max_retries}), retrying...")
+                    try:
+                        self._get_connection_from_pool()
+                    except Exception as reconnect_error:
+                        print(f"Failed to reconnect: {reconnect_error}")
                     time.sleep(0.5 * (attempt + 1))
                 else:
-                    print(f"❌ Failed to get user after {max_retries} attempts: {e}")
+                    print(f"❌ Failed to get user after {max_retries} attempts")
                     return None
             except (ValueError, TypeError) as e:
                 print(f"Invalid user_id format: {user_id}, error: {e}")
                 return None
             except Exception as e:
                 print(f"Unexpected error in get_user_by_id: {e}")
+                import traceback
+                traceback.print_exc()
                 return None
             finally:
                 if cursor:
@@ -1945,8 +1960,6 @@ class Database:
                         cursor.close()
                     except:
                         pass
-                if conn:
-                    self._return_connection(conn, commit=False, error=False)
 
     def update_last_login(self, user_id):
         """Update user's last login timestamp - user_id is UUID"""
