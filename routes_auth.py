@@ -520,7 +520,7 @@ def auth_callback():
                     user_data = session_data.get("data", {}).get("user", {})
             else:
                 # If it's an object with attributes
-                user_data = getattr(session_data, 'user', {})
+               exchange_code_for_session(code, code_verifier, redirect_url)
                 if not user_data:
                     user_data = getattr(session_data, 'data', {}).get('user', {}) if hasattr(session_data, 'data') else {}
             
