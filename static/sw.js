@@ -1,5 +1,5 @@
 // Service Worker for ResellGenie PWA
-const CACHE_NAME = 'resellgenius-v1';
+const CACHE_NAME = 'resellgenius-v2-2025-12-06';  // Changed version to force cache refresh
 const urlsToCache = [
   '/',
   '/static/manifest.json',
@@ -23,44 +23,50 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Fetch event - serve from cache when offline
+// Fetch event - NETWORK FIRST for HTML, cache for static assets
 self.addEventListener('fetch', (event) => {
+  const requestUrl = new URL(event.request.url);
+
+  // For HTML pages (navigation requests), always try network first
+  if (event.request.mode === 'navigate' || event.request.headers.get('accept').includes('text/html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Clone and cache the fresh response
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+          return response;
+        })
+        .catch(() => {
+          // Network failed, try cache as fallback
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // For static assets, use cache-first strategy
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Cache hit - return response
         if (response) {
           return response;
         }
 
-        // Clone the request
-        const fetchRequest = event.request.clone();
-
-        return fetch(fetchRequest).then((response) => {
-          // Check if valid response
+        return fetch(event.request).then((response) => {
           if (!response || response.status !== 200 || response.type !== 'basic') {
             return response;
           }
 
-          // Clone the response
           const responseToCache = response.clone();
-
           caches.open(CACHE_NAME)
             .then((cache) => {
               cache.put(event.request, responseToCache);
             });
 
           return response;
-        });
-      })
-      .catch(() => {
-        // Return offline page or fallback
-        return new Response('Offline - SellRage requires an internet connection', {
-          status: 503,
-          statusText: 'Service Unavailable',
-          headers: new Headers({
-            'Content-Type': 'text/plain'
-          })
         });
       })
   );
