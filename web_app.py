@@ -253,6 +253,24 @@ print("✅ Flask app initialized and ready to serve requests", flush=True)
 # MAIN ROUTES (not in blueprints)
 # ============================================================================
 
+@app.route('/debug-config')
+def debug_config():
+    """Debug endpoint to check Flask configuration"""
+    import os
+    config_info = {
+        'FLASK_ENV': os.getenv('FLASK_ENV', 'NOT SET'),
+        'is_production_check': os.getenv('FLASK_ENV') == 'production',
+        'SESSION_COOKIE_SAMESITE': app.config.get('SESSION_COOKIE_SAMESITE'),
+        'SESSION_COOKIE_SECURE': app.config.get('SESSION_COOKIE_SECURE'),
+        'SESSION_COOKIE_HTTPONLY': app.config.get('SESSION_COOKIE_HTTPONLY'),
+        'SESSION_TYPE': app.config.get('SESSION_TYPE'),
+        'SECRET_KEY_LENGTH': len(app.secret_key) if app.secret_key else 0,
+        'UPLOAD_FOLDER': app.config.get('UPLOAD_FOLDER'),
+    }
+
+    from flask import jsonify
+    return jsonify(config_info)
+
 @app.route('/')
 def index():
     """Landing page / dashboard"""
