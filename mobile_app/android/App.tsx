@@ -193,6 +193,12 @@ export default function App() {
 
     setAnalyzing(true);
     try {
+      console.log('Analyzing photos with AI...', {
+        api_url: `${API_BASE_URL}/ai/analyze`,
+        photo_count: photos.length,
+        photo_ids: photos.map(p => p.photo_id),
+      });
+
       const response = await axios.post(
         `${API_BASE_URL}/ai/analyze`,
         {
@@ -203,10 +209,12 @@ export default function App() {
           headers: {
             Authorization: 'Bearer demo_token',
           },
+          timeout: 30000, // 30 second timeout
         }
       );
 
       const analysis: AIAnalysis = response.data;
+      console.log('AI analysis received:', analysis);
 
       // Auto-fill form with AI analysis
       setTitle(analysis.title);
@@ -220,9 +228,19 @@ export default function App() {
       setCondition(analysis.condition);
 
       Alert.alert('Success', 'AI analysis complete! Review the generated listing.');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to analyze photos');
-      console.error(error);
+    } catch (error: any) {
+      console.error('AI analysis error:', error);
+      let errorMessage = 'Failed to analyze photos';
+
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timed out. Check your connection.';
+      } else if (error.response) {
+        errorMessage = `Server error: ${error.response.status} - ${error.response.data?.error || 'Unknown error'}`;
+      } else if (error.request) {
+        errorMessage = `Cannot reach server at ${API_BASE_URL}. Make sure the server is running and accessible from your device.`;
+      }
+
+      Alert.alert('Error', errorMessage);
     } finally {
       setAnalyzing(false);
     }
@@ -554,7 +572,11 @@ export default function App() {
         {/* AI Analysis Button */}
         {photos.length > 0 && (
           <TouchableOpacity
-            style={[styles.actionButton, styles.aiButton]}
+            style={[
+              styles.actionButton,
+              styles.aiButton,
+              analyzing && styles.aiButtonDisabled
+            ]}
             onPress={analyzeWithAI}
             disabled={analyzing}>
             <Text style={styles.actionButtonText}>
@@ -862,8 +884,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#2196F3',
   },
   aiButton: {
-    backgroundColor: '#9C27B0',
+    backgroundColor: '#00BCD4',
     marginHorizontal: 20,
+  },
+  aiButtonDisabled: {
+    backgroundColor: '#555',
+    opacity: 0.6,
   },
   postButton: {
     backgroundColor: '#FF6B00',
