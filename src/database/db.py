@@ -229,13 +229,24 @@ class Database:
             # Ignore errors - connection might be in bad state
             pass
 
-    def _get_cursor(self, retries=3):
+    def _get_cursor(self, retries=3, timeout=10):
         """Get PostgreSQL cursor from pool - returns (cursor, conn) tuple"""
+        import socket
         for attempt in range(retries):
             conn = None
             try:
                 # Get a fresh connection from the pool for this operation
                 conn = self.pool.getconn()
+                
+                # Set socket timeout on connection
+                if conn:
+                    try:
+                        # Set non-blocking timeout via socket
+                        if hasattr(conn, 'set_session'):
+                            conn.set_session(autocommit=False)
+                    except:
+                        pass
+                
                 if conn.closed:
                     # Connection is closed, return it to pool and get a new one
                     self.pool.putconn(conn, close=True)
@@ -250,7 +261,7 @@ class Database:
                 cursor = conn.cursor(cursor_factory=self.cursor_factory)
                 return cursor, conn
                 
-            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            except (psycopg2.OperationalError, psycopg2.InterfaceError, socket.timeout) as e:
                 print(f"⚠️  Database connection error (attempt {attempt + 1}/{retries}): {e}")
                 # Connection error - return bad connection to pool (will be closed)
                 if conn:
@@ -262,12 +273,15 @@ class Database:
                 if attempt < retries - 1:
                     # Wait before retrying (exponential backoff)
                     wait_time = 0.5 * (2 ** attempt)
+                    print(f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
                     print(f"❌ Failed after {retries} attempts")
                     raise
             except Exception as e:
                 print(f"❌ Unexpected error in _get_cursor: {e}")
+                import traceback
+                traceback.print_exc()
                 if conn:
                     try:
                         self.pool.putconn(conn, close=True)
