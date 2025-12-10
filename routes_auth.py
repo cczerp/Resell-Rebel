@@ -498,26 +498,24 @@ def auth_callback():
 
         code_verifier = session.get('oauth_code_verifier')
         
-        # If not in session, try to extract from state parameter (multi-worker fix)
+        # If not in session, try to extract from redirect query parameter (cv)
         if not code_verifier:
-            state = request.args.get('state')
-            if state:
+            cv = request.args.get('cv')
+            if cv:
                 try:
                     import base64
-                    # Decode the state parameter to get the code verifier
-                    # Add padding if needed
-                    padding = 4 - (len(state) % 4)
+                    padding = 4 - (len(cv) % 4)
                     if padding != 4:
-                        state += '=' * padding
-                    code_verifier = base64.urlsafe_b64decode(state).decode()
-                    print(f"✅ [CALLBACK] Extracted code verifier from state parameter: {code_verifier[:10]}...", flush=True)
+                        cv += '=' * padding
+                    code_verifier = base64.urlsafe_b64decode(cv).decode()
+                    print(f"✅ [CALLBACK] Extracted code verifier from redirect query param: {code_verifier[:10]}...", flush=True)
                 except Exception as e:
-                    print(f"⚠️  [CALLBACK] Failed to decode state parameter: {e}", flush=True)
+                    print(f"⚠️  [CALLBACK] Failed to decode cv param: {e}", flush=True)
                     code_verifier = None
-            
+
             if not code_verifier:
-                print(f"❌ [CALLBACK ERROR] No code verifier found in session OR state!", flush=True)
-                print(f"❌ [CALLBACK ERROR] This indicates PKCE session was LOST between /login/google and /auth/callback", flush=True)
+                print(f"❌ [CALLBACK ERROR] No code verifier found in session OR redirect param!", flush=True)
+                print(f"❌ [CALLBACK ERROR] This indicates PKCE verifier was not preserved across the OAuth round trip", flush=True)
                 print(f"❌ [CALLBACK ERROR] Possible causes:", flush=True)
                 print(f"   1. Multi-worker Gunicorn without shared session storage", flush=True)
                 print(f"   2. FLASK_SECRET_KEY changed or not set", flush=True)

@@ -87,24 +87,28 @@ def get_google_oauth_url(session_storage: dict = None, redirect_override: Option
         code_verifier, code_challenge = generate_pkce_pair()
         print(f"Generated PKCE code verifier and challenge")
 
-        # CRITICAL: Encode code_verifier in base64 and add to state parameter
-        # This works around Flask session not being shared across Gunicorn workers
+        # Encode verifier so we can pass it through redirect_to (Supabase owns `state`)
         code_verifier_encoded = base64.urlsafe_b64encode(code_verifier.encode()).decode().rstrip('=')
-        state = code_verifier_encoded
 
         # Store code verifier in session as fallback for single-worker deployments
         if session_storage is not None:
             session_storage['oauth_code_verifier'] = code_verifier
             print(f"Stored code verifier in session: {code_verifier[:10]}...")
 
-        # Construct OAuth URL manually with our PKCE parameters
-        from urllib.parse import urlencode
+        # Attach encoded verifier to redirect_to query to avoid breaking Supabase's state handling
+        from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+        parsed = urlparse(redirect_url)
+        query_dict = parse_qs(parsed.query)
+        query_dict['cv'] = [code_verifier_encoded]
+        new_query = urlencode(query_dict, doseq=True)
+        redirect_with_cv = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+
+        # Construct OAuth URL manually with our PKCE parameters (leave state untouched)
         params = {
             'provider': 'google',
-            'redirect_to': redirect_url,
+            'redirect_to': redirect_with_cv,
             'code_challenge': code_challenge,
-            'code_challenge_method': 's256',
-            'state': state  # Encode verifier in state for multi-worker support
+            'code_challenge_method': 's256'
         }
         oauth_url = f"{supabase_url}/auth/v1/authorize?{urlencode(params)}"
 
