@@ -498,13 +498,39 @@ def auth_callback():
 
         # Retrieve code verifier using flow_id parameter (for PKCE)
         print(f"🔍 [CALLBACK] Attempting to retrieve code_verifier...", flush=True)
-        
+
         flow_id = request.args.get('flow_id')
         code_verifier = None
         verifier_source = None
 
-        # Primary: Load from filesystem using flow_id
+        # Primary: Load from DATABASE using flow_id (works on Render/cloud platforms)
         if flow_id:
+            print(f"🔍 [CALLBACK] flow_id present: {flow_id[:10]}...", flush=True)
+            try:
+                cursor = db._get_cursor()
+                try:
+                    cursor.execute("""
+                        SELECT code_verifier FROM oauth_state
+                        WHERE flow_id = %s
+                    """, (flow_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        code_verifier = row['code_verifier']
+                        verifier_source = 'database'
+                        print(f"✅ [CALLBACK] Retrieved code verifier from database: {code_verifier[:10]}...", flush=True)
+                        # Clean up database entry
+                        cursor.execute("DELETE FROM oauth_state WHERE flow_id = %s", (flow_id,))
+                        db.conn.commit()
+                        print(f"🧹 [CALLBACK] Deleted oauth_state from database", flush=True)
+                    else:
+                        print(f"⚠️  [CALLBACK] No oauth_state found in database for flow_id: {flow_id[:10]}...", flush=True)
+                finally:
+                    cursor.close()
+            except Exception as e:
+                print(f"⚠️  [CALLBACK] Failed to retrieve from database: {e}", flush=True)
+
+        # Fallback 1: Try filesystem (for local development)
+        if not code_verifier and flow_id:
             from pathlib import Path
             state_file = Path('./data/oauth_state') / f"{flow_id}.txt"
             if state_file.exists():
@@ -512,17 +538,17 @@ def auth_callback():
                     code_verifier = state_file.read_text()
                     verifier_source = 'filesystem'
                     print(f"✅ [CALLBACK] Retrieved code verifier from filesystem: {code_verifier[:10]}...", flush=True)
-                    # Clean up state file immediately
                     state_file.unlink()
                     print(f"🧹 [CALLBACK] Deleted state file: {state_file}", flush=True)
                 except Exception as e:
                     print(f"⚠️  [CALLBACK] Failed to read state file: {e}", flush=True)
             else:
                 print(f"⚠️  [CALLBACK] State file not found: {state_file}", flush=True)
-        else:
+
+        if not flow_id:
             print(f"⚠️  [CALLBACK] No flow_id parameter in callback", flush=True)
 
-        # Fallback: Check session (single-worker deployments)
+        # Fallback 2: Check session (single-worker deployments)
         if not code_verifier:
             print(f"🔍 [CALLBACK] Checking session fallback...", flush=True)
             print(f"🔍 [CALLBACK] Current session data: {dict(session)}", flush=True)
@@ -533,9 +559,8 @@ def auth_callback():
                 session.pop('oauth_code_verifier', None)
                 session.pop('oauth_flow_id', None)
             else:
-                print(f"❌ [CALLBACK ERROR] No code verifier found in filesystem or session!", flush=True)
+                print(f"❌ [CALLBACK ERROR] No code verifier found in database, filesystem, or session!", flush=True)
                 print(f"❌ [CALLBACK ERROR] flow_id: {flow_id}, Session keys: {list(session.keys())}", flush=True)
-                print(f"⚠️  [CALLBACK] Attempting OAuth exchange WITHOUT code_verifier (will fail)", flush=True)
 
         if code_verifier:
             print(f"✅ [CALLBACK] Using code verifier from {verifier_source}: {code_verifier[:10]}...", flush=True)
