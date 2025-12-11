@@ -115,6 +115,8 @@ def get_google_oauth_url(session_storage: dict = None, redirect_override: Option
         oauth_url = f"{supabase_url}/auth/v1/authorize?{urlencode(params)}"
 
         print(f"Generated OAuth URL with PKCE and flow_id: {flow_id[:10]}...")
+        print(f"Redirect URL with flow_id: {redirect_with_flow}")
+        print(f"Full OAuth URL: {oauth_url[:150]}...")
         return oauth_url, flow_id
 
     except Exception as e:

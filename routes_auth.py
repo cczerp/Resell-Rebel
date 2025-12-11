@@ -464,7 +464,9 @@ def auth_callback():
 
     try:
         # Log all query parameters for debugging
+        print(f"🔍 [CALLBACK] Full callback URL: {request.url}", flush=True)
         print(f"🔍 [CALLBACK] Query params received: {dict(request.args)}", flush=True)
+        print(f"🔍 [CALLBACK] All query param keys: {list(request.args.keys())}", flush=True)
 
         # Reconstruct redirect URL exactly as used during OAuth initiation
         redirect_url = os.getenv("SUPABASE_REDIRECT_URL", "").strip()
@@ -537,6 +539,10 @@ def auth_callback():
 
         if code_verifier:
             print(f"✅ [CALLBACK] Using code verifier from {verifier_source}: {code_verifier[:10]}...", flush=True)
+        else:
+            print(f"❌ [CALLBACK FATAL ERROR] Cannot proceed without code_verifier!", flush=True)
+            flash("OAuth session expired or lost. Please try signing in again.", "error")
+            return redirect(url_for('auth.login'))
 
         # Exchange code for session
         session_data = exchange_code_for_session(code, code_verifier, redirect_url)
