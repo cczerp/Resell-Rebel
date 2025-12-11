@@ -89,13 +89,44 @@ def get_google_oauth_url(session_storage: dict = None, redirect_override: Option
             session_storage['oauth_flow_id'] = flow_id
             print(f"Stored code verifier in session: {code_verifier[:10]}...")
 
-        # Store verifier in filesystem keyed by flow_id (survives multi-worker)
+        # Store verifier in database (survives multi-worker on Render/cloud platforms)
+        # Use database instead of filesystem for cloud deployments
+        try:
+            from src.database import get_db
+            db = get_db()
+            cursor = db._get_cursor()
+            try:
+                # Create oauth_state table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS oauth_state (
+                        flow_id TEXT PRIMARY KEY,
+                        code_verifier TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                # Insert the code verifier
+                cursor.execute("""
+                    INSERT INTO oauth_state (flow_id, code_verifier)
+                    VALUES (%s, %s)
+                    ON CONFLICT (flow_id) DO UPDATE SET code_verifier = EXCLUDED.code_verifier
+                """, (flow_id, code_verifier))
+                db.conn.commit()
+                print(f"✅ Stored code verifier in database for flow_id: {flow_id[:10]}...")
+            finally:
+                cursor.close()
+        except Exception as e:
+            print(f"⚠️ Failed to store in database, falling back to session: {e}")
+
+        # ALSO keep filesystem as backup for local development
         from pathlib import Path
         state_dir = Path('./data/oauth_state')
-        state_dir.mkdir(parents=True, exist_ok=True)
-        state_file = state_dir / f"{flow_id}.txt"
-        state_file.write_text(code_verifier)
-        print(f"Stored code verifier in filesystem: {state_file}")
+        try:
+            state_dir.mkdir(parents=True, exist_ok=True)
+            state_file = state_dir / f"{flow_id}.txt"
+            state_file.write_text(code_verifier)
+            print(f"✅ Also stored in filesystem (local dev): {state_file.absolute()}")
+        except Exception as e:
+            print(f"⚠️ Filesystem storage failed (expected on cloud): {e}")
 
         # Append flow_id to redirect_to URL so it survives the OAuth round-trip
         from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
