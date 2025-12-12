@@ -70,25 +70,41 @@ def login():
         user_id = str(response.user.id)
         user_email = response.user.email
 
+        print(f"[LOGIN] 🔍 About to check database for user...", flush=True)
+
         # Check if user exists in our database
-        user_data = db.get_user_by_email(user_email) if db else None
+        try:
+            print(f"[LOGIN] 🔍 Calling db.get_user_by_email({user_email})...", flush=True)
+            user_data = db.get_user_by_email(user_email) if db else None
+            print(f"[LOGIN] ✅ Database query completed. User found: {bool(user_data)}", flush=True)
+        except Exception as e:
+            print(f"[LOGIN] ❌ Database query FAILED: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            user_data = None
 
         if not user_data:
             # Create new user record in our database
-            print(f"[LOGIN] Creating new user record for email: {user_email}")
+            print(f"[LOGIN] Creating new user record for email: {user_email}", flush=True)
             username = user_email.split('@')[0]  # Generate username from email
 
             if db:
                 try:
+                    print(f"[LOGIN] 🔍 Calling db.create_user()...", flush=True)
                     db.create_user(
                         username=username,
                         email=user_email,
                         password_hash=None,  # Supabase manages password
                         user_id=user_id  # Use Supabase user ID
                     )
+                    print(f"[LOGIN] ✅ User created in database", flush=True)
+                    print(f"[LOGIN] 🔍 Fetching created user...", flush=True)
                     user_data = db.get_user_by_email(user_email)
+                    print(f"[LOGIN] ✅ User fetched from database", flush=True)
                 except Exception as e:
-                    print(f"[LOGIN WARNING] Failed to create user record: {e}")
+                    print(f"[LOGIN WARNING] Failed to create user record: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc()
                     # Continue anyway - we can still log them in
 
         # Create User object for Flask-Login
