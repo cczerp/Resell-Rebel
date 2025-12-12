@@ -448,6 +448,65 @@ def resend_verification():
 
 
 # =============================================================================
+# DEBUG ENDPOINT - SUPABASE CONNECTION TEST
+# =============================================================================
+
+@auth_bp.route('/debug/supabase')
+def debug_supabase():
+    """Debug endpoint to test Supabase connectivity and session storage."""
+    import os
+    from flask import session, jsonify
+    from src.auth_utils import get_supabase_client
+
+    debug_info = {
+        "environment_variables": {
+            "SUPABASE_URL": bool(os.getenv("SUPABASE_URL", "").strip()),
+            "SUPABASE_ANON_KEY": bool(os.getenv("SUPABASE_ANON_KEY", "").strip()),
+            "FLASK_SECRET_KEY": bool(os.getenv("FLASK_SECRET_KEY", "").strip()),
+        },
+        "supabase_client": None,
+        "session_storage": None,
+        "flask_session_keys": list(session.keys()),
+    }
+
+    # Test Supabase client creation
+    try:
+        client = get_supabase_client()
+        if client:
+            debug_info["supabase_client"] = {
+                "status": "✅ Connected",
+                "url": client.supabase_url if hasattr(client, 'supabase_url') else "N/A",
+                "storage_type": type(client.options.storage).__name__ if hasattr(client, 'options') else "N/A",
+            }
+        else:
+            debug_info["supabase_client"] = {
+                "status": "❌ Failed to create client",
+                "error": "get_supabase_client() returned None"
+            }
+    except Exception as e:
+        debug_info["supabase_client"] = {
+            "status": "❌ Error",
+            "error": str(e)
+        }
+
+    # Test session storage
+    try:
+        test_key = "debug_test_key"
+        test_value = "debug_test_value"
+        session[test_key] = test_value
+
+        if session.get(test_key) == test_value:
+            debug_info["session_storage"] = "✅ Working"
+            session.pop(test_key, None)
+        else:
+            debug_info["session_storage"] = "❌ Failed to retrieve value"
+    except Exception as e:
+        debug_info["session_storage"] = f"❌ Error: {str(e)}"
+
+    return jsonify(debug_info)
+
+
+# =============================================================================
 # GOOGLE OAUTH WITH SUPABASE
 # =============================================================================
 
