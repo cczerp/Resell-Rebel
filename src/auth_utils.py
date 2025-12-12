@@ -137,15 +137,15 @@ def get_google_oauth_url(session_storage: dict = None, redirect_override: Option
         new_query = urlencode(query_dict, doseq=True)
         redirect_with_flow = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
 
-        # Step 2: Construct OAuth 2.1 authorization request
-        # Note: Supabase provider OAuth uses /auth/v1/authorize with provider parameter
-        # For standard OAuth 2.1 server, would use /auth/v1/oauth/authorize
+        # Step 2: Construct Supabase provider OAuth request
+        # NOTE: Supabase provider OAuth doesn't support custom PKCE parameters
+        # Supabase handles the OAuth flow internally with Google
+        # We store code_verifier in session for token exchange, but don't send it to Supabase authorize
         params = {
             'provider': 'google',  # Supabase provider OAuth
             'redirect_to': redirect_with_flow,
-            'code_challenge': code_challenge,
-            'code_challenge_method': 'S256',  # OAuth 2.1 requires uppercase S256
-            'state': state  # CSRF protection
+            # Don't include code_challenge - Supabase provider OAuth doesn't support it
+            # We'll use code_verifier during token exchange instead
         }
         oauth_url = f"{supabase_url}/auth/v1/authorize?{urlencode(params)}"
 
