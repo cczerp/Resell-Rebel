@@ -34,13 +34,14 @@ print("✅ Environment loaded", flush=True)
 
 app = Flask(__name__)
 
-# CRITICAL: Validate FLASK_SECRET_KEY is set
-flask_secret = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
+# CRITICAL: Validate SECRET_KEY is set
+# Try SECRET_KEY first (recommended), fall back to FLASK_SECRET_KEY for backwards compatibility
+flask_secret = os.getenv('SECRET_KEY') or os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 if not flask_secret or flask_secret == 'dev-secret-key-change-in-production':
     print("=" * 80, flush=True)
-    print("⚠️  WARNING: FLASK_SECRET_KEY not set or using default value!", flush=True)
+    print("⚠️  WARNING: SECRET_KEY not set or using default value!", flush=True)
     print("⚠️  This will cause session loss in production with multiple workers!", flush=True)
-    print("⚠️  Set FLASK_SECRET_KEY environment variable immediately!", flush=True)
+    print("⚠️  Set SECRET_KEY environment variable immediately!", flush=True)
     print("=" * 80, flush=True)
 
 app.secret_key = flask_secret
