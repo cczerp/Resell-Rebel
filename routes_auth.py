@@ -509,33 +509,34 @@ def auth_callback():
             print(f"⚠️  [CALLBACK] No code verifier in session", flush=True)
 
         # Fallback 1: Try DATABASE using flow_id (for multi-worker deployments)
-        if not code_verifier and flow_id:
-            print(f"🔍 [CALLBACK] flow_id present: {flow_id[:10]}, trying database...", flush=True)
-            try:
-                print(f"🔍 [CALLBACK] Attempting database query...", flush=True)
-                cursor = db._get_cursor()
-                try:
-                    cursor.execute("""
-                        SELECT code_verifier FROM oauth_state
-                        WHERE flow_id = %s
-                    """, (flow_id,))
-                    row = cursor.fetchone()
-                    if row:
-                        code_verifier = row['code_verifier']
-                        verifier_source = 'database'
-                        print(f"✅ [CALLBACK] Retrieved code verifier from database: {code_verifier[:10]}...", flush=True)
-                        # Clean up database entry
-                        cursor.execute("DELETE FROM oauth_state WHERE flow_id = %s", (flow_id,))
-                        db.conn.commit()
-                        print(f"🧹 [CALLBACK] Deleted oauth_state from database", flush=True)
-                    else:
-                        print(f"⚠️  [CALLBACK] No oauth_state found in database for flow_id: {flow_id[:10]}...", flush=True)
-                finally:
-                    cursor.close()
-            except Exception as e:
-                print(f"⚠️  [CALLBACK] Database query failed: {e}", flush=True)
-                import traceback
-                traceback.print_exc()
+        # DISABLED: Database queries cause hangs/timeouts. Session storage is sufficient.
+        # if not code_verifier and flow_id:
+        #     print(f"🔍 [CALLBACK] flow_id present: {flow_id[:10]}, trying database...", flush=True)
+        #     try:
+        #         print(f"🔍 [CALLBACK] Attempting database query...", flush=True)
+        #         cursor = db._get_cursor()
+        #         try:
+        #             cursor.execute("""
+        #                 SELECT code_verifier FROM oauth_state
+        #                 WHERE flow_id = %s
+        #             """, (flow_id,))
+        #             row = cursor.fetchone()
+        #             if row:
+        #                 code_verifier = row['code_verifier']
+        #                 verifier_source = 'database'
+        #                 print(f"✅ [CALLBACK] Retrieved code verifier from database: {code_verifier[:10]}...", flush=True)
+        #                 # Clean up database entry
+        #                 cursor.execute("DELETE FROM oauth_state WHERE flow_id = %s", (flow_id,))
+        #                 db.conn.commit()
+        #                 print(f"🧹 [CALLBACK] Deleted oauth_state from database", flush=True)
+        #             else:
+        #                 print(f"⚠️  [CALLBACK] No oauth_state found in database for flow_id: {flow_id[:10]}...", flush=True)
+        #         finally:
+        #             cursor.close()
+        #     except Exception as e:
+        #         print(f"⚠️  [CALLBACK] Database query failed: {e}", flush=True)
+        #         import traceback
+        #         traceback.print_exc()
 
         # Fallback 2: Try filesystem (for local development)
         if not code_verifier and flow_id:
