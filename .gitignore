@@ -35,5 +35,3 @@ dist/
 *.spec
 # === Backup / Mistake Files ===
 *.bak.*
-Flask)
-".env" 

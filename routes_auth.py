@@ -652,17 +652,32 @@ def auth_callback():
                     # File may contain code_verifier only, or code_verifier\nstate
                     file_content = state_file.read_text()
                     lines = file_content.strip().split('\n')
-                    code_verifier = lines[0]
-                    if len(lines) > 1:
-                        stored_state_from_file = lines[1]
-                        # Validate state if we have it
-                        if received_state and stored_state_from_file and received_state != stored_state_from_file:
-                            print(f"❌ [CALLBACK] State mismatch from file - possible CSRF attack!", flush=True)
-                            code_verifier = None  # Don't proceed with invalid state
-                    verifier_source = 'filesystem'
-                    print(f"✅ [CALLBACK] Retrieved code verifier from filesystem: {code_verifier[:10] if code_verifier else 'None'}...", flush=True)
-                    state_file.unlink()
-                    print(f"🧹 [CALLBACK] Deleted state file: {state_file}", flush=True)
+                    if len(lines) > 0:
+                        temp_code_verifier = lines[0]
+                        state_validation_passed = True
+                        
+                        # Validate state if file contains state and we received state
+                        if len(lines) > 1:
+                            stored_state_from_file = lines[1]
+                            # Only validate if we have both received_state and stored_state_from_file
+                            if received_state and stored_state_from_file:
+                                if received_state != stored_state_from_file:
+                                    print(f"❌ [CALLBACK] State mismatch from file - possible CSRF attack!", flush=True)
+                                    state_validation_passed = False
+                                else:
+                                    print(f"✅ [CALLBACK] State validation passed from file", flush=True)
+                        
+                        # Only set code_verifier if state validation passed
+                        if state_validation_passed:
+                            code_verifier = temp_code_verifier
+                            verifier_source = 'filesystem'
+                            print(f"✅ [CALLBACK] Retrieved code verifier from filesystem: {code_verifier[:10]}...", flush=True)
+                            state_file.unlink()
+                            print(f"🧹 [CALLBACK] Deleted state file: {state_file}", flush=True)
+                        else:
+                            print(f"❌ [CALLBACK] State validation failed, not using code verifier from file", flush=True)
+                    else:
+                        print(f"⚠️  [CALLBACK] State file is empty", flush=True)
                 except Exception as e:
                     print(f"⚠️  [CALLBACK] Failed to read state file: {e}", flush=True)
             else:
