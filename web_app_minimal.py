@@ -62,32 +62,52 @@ print(f"   - Cookie HTTPOnly: {app.config['SESSION_COOKIE_HTTPONLY']}", flush=Tr
 # ============================================================================
 # FLASK-SESSION CONFIGURATION (Server-side session storage)
 # ============================================================================
-# CRITICAL: Use Redis for production to persist sessions across workers/restarts
+# CRITICAL: Use PostgreSQL database for session storage to persist across workers/restarts
 # This fixes the "bad_oauth_state" error on Render's ephemeral filesystem
 
-redis_url = os.getenv('REDIS_URL')
+database_url = os.getenv('DATABASE_URL')
 
-if redis_url:
-    # Production: Use Redis for session storage (works with ephemeral filesystems)
-    from redis import Redis
+if database_url:
+    # Production: Use PostgreSQL database for session storage
+    from flask_sqlalchemy import SQLAlchemy
 
-    print(f"🔧 Configuring Redis session storage...", flush=True)
-    app.config['SESSION_TYPE'] = 'redis'
-    app.config['SESSION_REDIS'] = Redis.from_url(redis_url)
+    print(f"🔧 Configuring database session storage...", flush=True)
+
+    # Configure SQLAlchemy
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
+
+    # Configure Flask-Session to use SQLAlchemy
+    app.config['SESSION_TYPE'] = 'sqlalchemy'
     app.config['SESSION_PERMANENT'] = False  # Session expires when browser closes
     app.config['SESSION_USE_SIGNER'] = True  # Sign session cookies for security
+    app.config['SESSION_SQLALCHEMY_TABLE'] = 'flask_sessions'
+
+    # Initialize SQLAlchemy
+    db_sessions = SQLAlchemy(app)
+
+    # Set the SQLAlchemy instance for Flask-Session
+    app.config['SESSION_SQLALCHEMY'] = db_sessions
 
     # Initialize Flask-Session
     Session(app)
 
-    print(f"✅ Flask-Session initialized with Redis:", flush=True)
-    print(f"   - Type: redis", flush=True)
-    print(f"   - URL: {redis_url[:20]}...", flush=True)
+    # Create sessions table if it doesn't exist
+    with app.app_context():
+        db_sessions.create_all()
+
+    print(f"✅ Flask-Session initialized with PostgreSQL:", flush=True)
+    print(f"   - Type: sqlalchemy (PostgreSQL)", flush=True)
+    print(f"   - Table: flask_sessions", flush=True)
     print(f"   - Permanent: False", flush=True)
     print(f"   - Use Signer: True", flush=True)
 else:
     # Development: Fall back to filesystem for local development
-    print(f"⚠️  REDIS_URL not set - using filesystem sessions (NOT for production!)", flush=True)
+    print(f"⚠️  DATABASE_URL not set - using filesystem sessions (local dev only!)", flush=True)
 
     session_dir = Path('./data/flask_session')
     session_dir.mkdir(parents=True, exist_ok=True)
