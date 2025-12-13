@@ -571,14 +571,15 @@ def login_google():
             flash("Failed to generate Google OAuth URL. Please check Supabase configuration.", "error")
             return redirect(url_for('auth.login'))
 
-        oauth_url, flow_id = oauth_result
+        oauth_url, flow_id, state = oauth_result
 
-        # CRITICAL: Mark session as modified to ensure it's saved
-        # This is important for multi-worker environments
+        # CRITICAL: Mark session as modified to ensure it's saved to Redis
+        # This is important for Redis-backed sessions
         session.modified = True
-        print(f"🔍 [LOGIN_GOOGLE] Session after OAuth URL generation: {dict(session)}", flush=True)
-        print(f"✅ [LOGIN_GOOGLE] Session marked as modified", flush=True)
+        print(f"🔍 [LOGIN_GOOGLE] Session after OAuth URL generation: {list(session.keys())}", flush=True)
+        print(f"✅ [LOGIN_GOOGLE] Session marked as modified and will be saved to Redis", flush=True)
         print(f"✅ [LOGIN_GOOGLE] OAuth URL generated with flow_id: {flow_id[:10]}...", flush=True)
+        print(f"✅ [LOGIN_GOOGLE] State parameter: {state[:20]}...", flush=True)
         print(f"🚀 [LOGIN_GOOGLE] Redirecting to: {oauth_url[:100]}...", flush=True)
         return redirect(oauth_url)
     except Exception as e:
@@ -629,18 +630,25 @@ def auth_callback():
         # Get state parameter for CSRF validation (OAuth 2.1 requirement)
         received_state = request.args.get('state')
         stored_state = session.get('oauth_state')
-        print(f"🔍 [CALLBACK] State validation - received: {bool(received_state)}, stored: {bool(stored_state)}", flush=True)
-        
-        # Validate state parameter (OAuth 2.1 CSRF protection)
-        if received_state and stored_state:
-            if received_state != stored_state:
-                print(f"❌ [CALLBACK] State mismatch - possible CSRF attack!", flush=True)
-                flash("OAuth authentication failed: Security validation error", "error")
+        print(f"🔍 [CALLBACK] State validation - received: {bool(received_state)}, stored in session: {bool(stored_state)}", flush=True)
+
+        # Validate state parameter using Redis (primary) and session (fallback)
+        if received_state:
+            # First try to verify state using Redis (most secure)
+            from src.auth_utils import verify_oauth_state
+            redis_flow_id = verify_oauth_state(received_state)
+
+            if redis_flow_id:
+                print(f"✅ [CALLBACK] State verified via Redis (flow_id: {redis_flow_id[:10]}...)", flush=True)
+            elif stored_state and received_state == stored_state:
+                # Fallback to session-based validation
+                print(f"✅ [CALLBACK] State verified via Flask session (fallback)", flush=True)
+            else:
+                print(f"❌ [CALLBACK] State validation failed - possible CSRF attack or expired state!", flush=True)
+                flash("OAuth authentication failed: Security validation error or session expired", "error")
                 return redirect(url_for('auth.login'))
-            print(f"✅ [CALLBACK] State parameter validated successfully", flush=True)
-        elif received_state or stored_state:
-            # One is missing - log warning but don't block (for backward compatibility)
-            print(f"⚠️  [CALLBACK] State parameter missing on one side (received: {bool(received_state)}, stored: {bool(stored_state)})", flush=True)
+        else:
+            print(f"⚠️  [CALLBACK] No state parameter received from OAuth provider", flush=True)
 
         # Get authorization code from query params
         code = request.args.get("code")
