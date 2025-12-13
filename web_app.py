@@ -51,29 +51,71 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max upload
 app.config['UPLOAD_FOLDER'] = './data/uploads'
 
 # ============================================================================
-# SESSION CONFIGURATION (Built-in Flask cookie sessions)
+# SESSION CONFIGURATION (Redis-based sessions via Upstash)
 # ============================================================================
-# Using Flask's built-in encrypted cookie sessions - perfect for OAuth!
-# - Sessions stored in browser (encrypted with SECRET_KEY)
-# - Survives worker restarts and ephemeral filesystems
-# - No database/Redis/filesystem needed
-# - Perfect for PKCE OAuth flow
+# Using Redis for server-side session storage:
+# - Sessions stored in Upstash Redis (persistent, reliable)
+# - Perfect for OAuth PKCE flow (code_verifier storage)
+# - Supports multi-worker deployments
+# - Works with ephemeral filesystems (Render, Heroku, etc.)
+
+import redis
+from flask_session import Session
 
 # Detect production environment
 is_production = os.getenv('FLASK_ENV') == 'production' or bool(os.getenv('RENDER_EXTERNAL_URL'))
 
-# Required for OAuth PKCE + SameSite=None cookies
+# Get Redis URL from environment
+redis_url = os.getenv('REDIS_URL')
+if not redis_url:
+    print("=" * 80, flush=True)
+    print("⚠️  WARNING: REDIS_URL not set!", flush=True)
+    print("⚠️  Sessions will not work without Redis!", flush=True)
+    print("⚠️  Set REDIS_URL environment variable immediately!", flush=True)
+    print("=" * 80, flush=True)
+    sys.exit(1)
+
+# Configure Redis client for sessions
+try:
+    session_redis = redis.from_url(
+        redis_url,
+        decode_responses=False,  # Keep binary for session data
+        socket_connect_timeout=5,
+        socket_timeout=5
+    )
+    # Test connection
+    session_redis.ping()
+    print(f"✅ Redis connection successful: {redis_url.split('@')[1] if '@' in redis_url else 'connected'}", flush=True)
+except Exception as e:
+    print(f"❌ Failed to connect to Redis: {e}", flush=True)
+    print(f"   Redis URL: {redis_url}", flush=True)
+    sys.exit(1)
+
+# Configure Flask-Session to use Redis
+app.config['SESSION_TYPE'] = 'redis'
+app.config['SESSION_REDIS'] = session_redis
+app.config['SESSION_PERMANENT'] = True
+app.config['SESSION_USE_SIGNER'] = True  # Sign session cookies for security
+app.config['SESSION_KEY_PREFIX'] = 'resell_rebel:session:'  # Namespace for session keys
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+
+# Cookie settings for OAuth compatibility
 app.config['SESSION_COOKIE_SECURE'] = True if is_production else False
 app.config['SESSION_COOKIE_SAMESITE'] = 'None' if is_production else 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent XSS attacks
-app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+app.config['SESSION_COOKIE_NAME'] = 'resell_rebel_session'
 app.config['REMEMBER_COOKIE_DURATION'] = 86400  # 24 hours
 
-print(f"🔧 Session configuration (built-in Flask cookie sessions):", flush=True)
-print(f"   - Storage: Encrypted browser cookies (no server-side storage)", flush=True)
+# Initialize Flask-Session
+Session(app)
+
+print(f"🔧 Session configuration (Redis-based sessions):", flush=True)
+print(f"   - Storage: Upstash Redis (server-side)", flush=True)
+print(f"   - Session Type: {app.config['SESSION_TYPE']}", flush=True)
 print(f"   - Cookie SameSite: {app.config['SESSION_COOKIE_SAMESITE']}", flush=True)
 print(f"   - Cookie Secure: {app.config['SESSION_COOKIE_SECURE']}", flush=True)
 print(f"   - Cookie HTTPOnly: {app.config['SESSION_COOKIE_HTTPONLY']}", flush=True)
+print(f"   - Session Lifetime: {app.config['PERMANENT_SESSION_LIFETIME']}s", flush=True)
 
 # Ensure upload folder exists
 Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
