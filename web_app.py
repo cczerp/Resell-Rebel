@@ -207,9 +207,9 @@ def load_user(user_id):
         print(f"[USER_LOADER ERROR] Invalid user_id: {e}")
         return None
     except Exception as e:
-        print(f"[USER_LOADER ERROR] Error loading user: {e}")
-        import traceback
-        traceback.print_exc()
+        # Database errors (SSL connection failures, etc.) should not crash the app
+        # Just log and return None, which tells Flask-Login the user is not authenticated
+        print(f"[USER_LOADER ERROR] Error loading user (returning None): {e}")
         return None
 
 # ============================================================================
